@@ -253,7 +253,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 
     <ol style="font-size:13px;color:var(--text-dim);padding-left:18px;margin:0 0 16px;">
       <li style="margin-bottom:6px;">Get a token at Discogs → Settings → <a href="https://www.discogs.com/settings/developers" target="_blank" style="color:var(--teal);">Developers</a> → "Generate new token."</li>
-      <li style="margin-bottom:6px;">Download <code style="color:var(--amber);">fetch_discogs_collection.py</code> (shared alongside this app) and run: <br><span style="font-family:'IBM Plex Mono',monospace;color:var(--text);">python fetch_discogs_collection.py YOUR_USERNAME YOUR_TOKEN</span></li>
+      <li style="margin-bottom:6px;">Download <code style="color:var(--amber);">fetch_discogs_collection.py</code> (shared alongside this app) and run: <br><span style="font-family:'IBM Plex Mono',monospace;color:var(--text);">python fetch_discogs_collection.py YOUR_USERNAME YOUR_TOKEN</span><br>Optionally add a free <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">GetSongBPM</a> API key as a third argument to also look up BPM per release (coverage will be partial).</li>
       <li>Drop the <code style="color:var(--amber);">discogs_collection.json</code> it writes into the box below.</li>
     </ol>
 
@@ -291,6 +291,14 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
           <input type="number" id="yearMin" placeholder="1965">
           <span class="year-sep">—</span>
           <input type="number" id="yearMax" placeholder="2026">
+        </div>
+      </div>
+      <div class="field">
+        <label>BPM range <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(only excludes releases with a known BPM outside it)</span></label>
+        <div class="year-inputs">
+          <input type="number" id="bpmMin" placeholder="90">
+          <span class="year-sep">—</span>
+          <input type="number" id="bpmMax" placeholder="140">
         </div>
       </div>
       <div class="field">
@@ -382,7 +390,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
   </div>
 
   <div class="footnote">
-    Assumptions baked in: the collection comes from a local JSON file (this sandbox can't reach the Discogs API directly, and Discogs' own CSV export leaves out genre/style), so re-run the script when your collection changes. Track duration isn't pulled per-release either, so length is estimated from the avg-minutes-per-track field above. Tempo/origin is a hint passed to Claude, not filtered against Discogs metadata directly. Tidal links open a search for each track rather than auto-adding — full push-to-playlist needs a registered OAuth app with a fixed redirect URI, which this standalone tool doesn't have.
+    Assumptions baked in: the collection comes from a local JSON file (this sandbox can't reach the Discogs API directly, and Discogs' own CSV export leaves out genre/style), so re-run the script when your collection changes. Track duration isn't pulled per-release either, so length is estimated from the avg-minutes-per-track field above. BPM comes from an optional, best-effort GetSongBPM lookup in the fetch script — coverage is partial (weakest for obscure or vinyl-only pressings), so the BPM range filter only excludes releases with a known BPM outside it; anything without a match passes through and falls back to the tempo/mood hint instead. Tidal links open a search for each track rather than auto-adding — full push-to-playlist needs a registered OAuth app with a fixed redirect URI, which this standalone tool doesn't have.
   </div>
 
 </div>
@@ -507,11 +515,13 @@ function deriveFacets(){
 }
 
 function renderCollectionStats(syncedAt){
+  const bpmCount = state.collection.filter(r=>r.bpm).length;
   $('collectionStats').classList.remove('hidden');
   $('collectionStats').innerHTML = `
     <div><b>${state.collection.length}</b>releases</div>
     <div><b>${state.genres.length}</b>genres</div>
     <div><b>${state.styles.length}</b>styles</div>
+    <div><b>${bpmCount}</b>have BPM</div>
     <div><b>${new Date(syncedAt).toLocaleDateString()}</b>last synced</div>
   `;
 }
@@ -541,10 +551,13 @@ function renderChipGroup(elId, values, selectedSet){
 function applyFilters(){
   const yMin = parseInt($('yearMin').value) || 0;
   const yMax = parseInt($('yearMax').value) || 9999;
+  const bpmMin = parseInt($('bpmMin').value) || 0;
+  const bpmMax = parseInt($('bpmMax').value) || 999;
   state.candidates = state.collection.filter(r=>{
     if(state.selectedGenres.size && !r.genres.some(g=>state.selectedGenres.has(g))) return false;
     if(state.selectedStyles.size && !r.styles.some(s=>state.selectedStyles.has(s))) return false;
     if(r.year && (r.year < yMin || r.year > yMax)) return false;
+    if(r.bpm && (r.bpm < bpmMin || r.bpm > bpmMax)) return false;
     return true;
   });
   $('candidateCount').textContent = `${state.candidates.length} release${state.candidates.length===1?'':'s'} match current filters`;
@@ -583,13 +596,14 @@ async function generatePlaylist(){
   const pool = state.candidates.length > 220 ? shuffledSample(state.candidates, 220) : state.candidates;
   const candidateLite = pool.map(r => ({
     id: r.id, artist: r.artist, title: r.title, year: r.year,
-    genres: r.genres, styles: r.styles
+    genres: r.genres, styles: r.styles, bpm: r.bpm || null
   }));
+  const knownBpmCount = candidateLite.filter(r => r.bpm).length;
 
   $('btnGenerate').disabled = true;
   setStatus($('generateStatus'), spinnerLine('Claude is sequencing the set…'));
 
-  const systemPrompt = `You are curating a sequenced playlist for a vinyl DJ's pre-set prep listening on a streaming service. You are given a candidate pool pulled from the DJ's own record collection, already filtered by genre/style/year. Respond ONLY with valid JSON — no prose, no markdown code fences, no explanation outside the JSON.
+  const systemPrompt = `You are curating a sequenced playlist for a vinyl DJ's pre-set prep listening on a streaming service. You are given a candidate pool pulled from the DJ's own record collection, already filtered by genre/style/year/BPM. Respond ONLY with valid JSON — no prose, no markdown code fences, no explanation outside the JSON.
 
 Output format: a JSON array of objects, in playing order:
 [{"id": <candidate id, must exactly match an id from the candidate pool>, "note": "<one sentence, max 20 words, on why this track earns its spot or where it sits in the set's arc>"}]
@@ -598,7 +612,8 @@ Rules:
 - Choose approximately ${targetCount} tracks (within 2 of that number).
 - Only use ids that appear in the candidate pool. Never invent tracks.
 - Order matters: sequence for a coherent arc (open, build, peak, cool-down) suited to warm-up / transition-prep listening, not a shuffle.
-- Treat any tempo/mood/origin hint as a loose steer, not a strict filter — the collection has no BPM data, so use genre/style/year/artist knowledge as a proxy.
+- Only ${knownBpmCount} of ${candidateLite.length} candidates have a known bpm value (coverage is partial, from a best-effort external lookup) — use it directly for pacing/transitions when present, and fall back to genre/style/year/artist knowledge as a tempo proxy for candidates where bpm is null.
+- Treat any tempo/mood/origin hint as a loose steer on top of that, not a hard filter.
 - Prefer variety across labels and years unless the hint says otherwise.`;
 
   const userPrompt = JSON.stringify({
@@ -832,7 +847,7 @@ $('saveModalInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter') confirmSavePlaylist();
   if(e.key === 'Escape') closeSaveModal();
 });
-['yearMin','yearMax'].forEach(id => $(id).addEventListener('input', applyFilters));
+['yearMin','yearMax','bpmMin','bpmMax'].forEach(id => $(id).addEventListener('input', applyFilters));
 [...$('durToggle').children].forEach(b => b.addEventListener('click', ()=> setDurMode(b.dataset.mode)));
 $('durToggle').dataset.mode = 'tracks';
 
