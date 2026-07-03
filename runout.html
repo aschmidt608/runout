@@ -158,6 +158,13 @@ textarea{
 }
 textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
 
+.checkbox-label{
+  display:flex;align-items:center;gap:8px;margin-top:4px;cursor:pointer;
+  font-family:'Work Sans',sans-serif;text-transform:none;letter-spacing:0;
+  color:var(--text-dim);font-size:13px;font-weight:400;
+}
+.checkbox-label input[type=checkbox]{width:auto;accent-color:var(--amber);cursor:pointer;}
+
 .dur-toggle{display:flex;border:1px solid var(--border-bright);border-radius:2px;overflow:hidden;width:fit-content;}
 .dur-toggle button{
   background:var(--bg);color:var(--text-dim);border-radius:0;padding:9px 16px;font-size:12px;
@@ -302,6 +309,11 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
         <input type="number" id="avgLen" value="4.5" step="0.5" min="1" max="15">
       </div>
     </div>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="splitSides">
+      Split into A/B sides (mixtape-style) — off gives one continuous tracklist
+    </label>
 
     <label>Tempo / mood / origin hint <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(no BPM data in Discogs — this is advisory, not a hard filter)</span></label>
     <textarea id="vibeHint" placeholder="e.g. 110-120bpm, driving and dubby, West African & Brazilian leaning, needs to build not peak"></textarea>
@@ -623,10 +635,12 @@ Rules:
       throw new Error('Claude returned no valid picks — try again or loosen filters.');
     }
 
+    const splitSides = $('splitSides').checked;
     const half = Math.ceil(tracks.length/2);
     state.playlist = {
-      sideA: tracks.slice(0, half),
-      sideB: tracks.slice(half),
+      sideA: splitSides ? tracks.slice(0, half) : tracks,
+      sideB: splitSides ? tracks.slice(half) : [],
+      splitSides,
       avgLen, mode, durValue, targetCount, vibeHint, extraNotes,
       createdAt: Date.now()
     };
@@ -645,12 +659,12 @@ function tidalLink(t){
   return `https://tidal.com/search?q=${encodeURIComponent(t.artist + ' ' + t.title)}`;
 }
 
-function renderSide(elId, label, tracks, offset){
+function renderSide(elId, headerText, numLabel, tracks){
   const el = $(elId);
   if(!tracks.length){ el.innerHTML=''; return; }
   const rows = tracks.map((t,i)=>`
     <div class="track">
-      <div class="track-num">${label}${i+1}</div>
+      <div class="track-num">${numLabel}${i+1}</div>
       <div class="track-body">
         <div class="track-title">${escapeHtml(t.artist)} — ${escapeHtml(t.title)} <span class="yr">${t.year||''}</span></div>
         <div class="track-tags">${[...(t.genres||[]), ...(t.styles||[])].join(' · ')}</div>
@@ -662,7 +676,7 @@ function renderSide(elId, label, tracks, offset){
       </div>
     </div>
   `).join('');
-  el.innerHTML = `<div class="side-label">Side ${label}<span class="count">${tracks.length} tracks</span></div>${rows}`;
+  el.innerHTML = `<div class="side-label">${headerText}<span class="count">${tracks.length} tracks</span></div>${rows}`;
 }
 
 function escapeHtml(s){
@@ -677,8 +691,14 @@ function renderPlaylist(){
     <div><b>${all.length}</b>tracks</div>
     <div><b>~${estMinutes}m</b>est. runtime</div>
   `;
-  renderSide('sideA','A', state.playlist.sideA, 0);
-  renderSide('sideB','B', state.playlist.sideB, state.playlist.sideA.length);
+  const splitSides = state.playlist.splitSides !== false;
+  if(splitSides){
+    renderSide('sideA', 'Side A', 'A', state.playlist.sideA);
+    renderSide('sideB', 'Side B', 'B', state.playlist.sideB);
+  } else {
+    renderSide('sideA', 'Tracklist', '', all);
+    $('sideB').innerHTML = '';
+  }
 }
 
 function copyTracklist(){
