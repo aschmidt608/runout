@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Pulls your full Discogs collection (with genre/style/year data that Discogs'
-own CSV export leaves out) into a single JSON file for Crate -> Cue.
+own CSV export leaves out) into a single JSON file for Runout.
 
 Usage:
     python fetch_discogs_collection.py YOUR_USERNAME YOUR_TOKEN
@@ -22,7 +22,7 @@ import urllib.error
 import urllib.parse
 
 PER_PAGE = 100
-USER_AGENT = "CrateToCue/1.0 +personal-use-script"
+USER_AGENT = "Runout/1.0 +personal-use-script"
 
 
 def fetch_page(username, token, page):
@@ -91,7 +91,7 @@ def main():
         json.dump(out, f, ensure_ascii=False, indent=None)
 
     print(f"Done. {len(releases)} releases written to discogs_collection.json")
-    print("Drop that file into Crate -> Cue's collection loader.")
+    print("Drop that file into Runout's collection loader.")
 
 
 if __name__ == "__main__":
