@@ -206,6 +206,23 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 
 .footnote{font-size:12px;color:var(--text-faint);margin-top:26px;line-height:1.6;}
 .hidden{display:none !important;}
+
+/* modals */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;z-index:100;
+}
+.modal{
+  background:var(--bg-panel-raised);border:1px solid var(--border-bright);
+  border-radius:var(--radius);padding:22px;max-width:400px;width:100%;
+}
+.modal h3{
+  margin:0 0 14px;font-family:'Oswald',sans-serif;font-size:15px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text);
+}
+.modal .row-actions{margin-top:16px;justify-content:flex-end;}
+.modal-error{font-size:12px;color:var(--red);margin-top:8px;}
 </style>
 </head>
 <body>
@@ -325,6 +342,31 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
       <div class="panel-title">Saved sets</div>
     </div>
     <div id="savedList"></div>
+  </div>
+
+  <!-- SAVE SET MODAL -->
+  <div class="modal-overlay hidden" id="saveModalOverlay">
+    <div class="modal">
+      <h3>Name this set</h3>
+      <input type="text" id="saveModalInput" placeholder="e.g. Friday warm-up">
+      <div class="modal-error hidden" id="saveModalError">Could not save — try again.</div>
+      <div class="row-actions">
+        <button class="ghost small" id="saveModalCancel">Cancel</button>
+        <button class="small" id="saveModalConfirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COPY FALLBACK MODAL -->
+  <div class="modal-overlay hidden" id="copyModalOverlay">
+    <div class="modal">
+      <h3>Copy tracklist</h3>
+      <div class="hint" style="margin-bottom:8px;">Automatic copy isn't available here — the text below is selected, so press Cmd/Ctrl+C to copy it.</div>
+      <textarea id="copyModalText" readonly style="min-height:180px;font-family:'IBM Plex Mono',monospace;font-size:12px;"></textarea>
+      <div class="row-actions">
+        <button class="small" id="copyModalClose">Close</button>
+      </div>
+    </div>
   </div>
 
   <div class="footnote">
@@ -643,25 +685,75 @@ function copyTracklist(){
   if(!state.playlist) return;
   const all = [...state.playlist.sideA, ...state.playlist.sideB];
   const text = all.map((t,i)=>`${i+1}. ${t.artist} — ${t.title}${t.year?` (${t.year})`:''}`).join('\n');
-  navigator.clipboard.writeText(text).then(()=>{
+
+  const showCopied = () => {
     $('btnCopy').textContent = 'Copied';
     setTimeout(()=> $('btnCopy').textContent = 'Copy tracklist', 1400);
-  });
+  };
+
+  const legacyCopy = () => {
+    let ok = false;
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e){ ok = false; }
+    if(ok) showCopied();
+    else openCopyModal(text);
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(showCopied).catch(legacyCopy);
+  } else {
+    legacyCopy();
+  }
+}
+
+function openCopyModal(text){
+  $('copyModalText').value = text;
+  $('copyModalOverlay').classList.remove('hidden');
+  $('copyModalText').focus();
+  $('copyModalText').select();
+}
+function closeCopyModal(){
+  $('copyModalOverlay').classList.add('hidden');
 }
 
 /* ---------- saved sets ---------- */
-async function savePlaylist(){
+function savePlaylist(){
   if(!state.playlist) return;
+  openSaveModal();
+}
+
+function openSaveModal(){
+  $('saveModalError').classList.add('hidden');
+  $('saveModalInput').value = new Date().toLocaleString();
+  $('saveModalOverlay').classList.remove('hidden');
+  $('saveModalInput').focus();
+  $('saveModalInput').select();
+}
+function closeSaveModal(){
+  $('saveModalOverlay').classList.add('hidden');
+}
+
+async function confirmSavePlaylist(){
+  const label = $('saveModalInput').value.trim();
+  if(!label) return;
   const key = `playlist-${Date.now()}`;
-  const label = window.prompt('Name this set', new Date().toLocaleString());
-  if(label === null) return;
   try{
     await window.storage.set(key, JSON.stringify({...state.playlist, label}), false);
     await renderSavedSets();
+    closeSaveModal();
     $('btnSave').textContent = 'Saved';
     setTimeout(()=> $('btnSave').textContent = 'Save this set', 1400);
   }catch(e){
-    alert('Could not save — try again.');
+    $('saveModalError').classList.remove('hidden');
   }
 }
 
@@ -713,6 +805,13 @@ $('btnGenerate').addEventListener('click', generatePlaylist);
 $('btnRegenerate').addEventListener('click', generatePlaylist);
 $('btnCopy').addEventListener('click', copyTracklist);
 $('btnSave').addEventListener('click', savePlaylist);
+$('copyModalClose').addEventListener('click', closeCopyModal);
+$('saveModalCancel').addEventListener('click', closeSaveModal);
+$('saveModalConfirm').addEventListener('click', confirmSavePlaylist);
+$('saveModalInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') confirmSavePlaylist();
+  if(e.key === 'Escape') closeSaveModal();
+});
 ['yearMin','yearMax'].forEach(id => $(id).addEventListener('input', applyFilters));
 [...$('durToggle').children].forEach(b => b.addEventListener('click', ()=> setDurMode(b.dataset.mode)));
 $('durToggle').dataset.mode = 'tracks';
