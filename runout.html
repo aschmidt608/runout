@@ -452,7 +452,7 @@ const TIDAL_CLIENT_ID = 'iyoSzjTEfPxT1uwe';
 const TIDAL_AUTH_URL = 'https://login.tidal.com/authorize';
 const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
 const TIDAL_API_BASE = 'https://openapi.tidal.com/v2';
-const TIDAL_SCOPES = 'playlists.write playlists.read';
+const TIDAL_SCOPES = 'playlists.write playlists.read user.read';
 const TIDAL_TOKEN_STORAGE = 'tidal-token';
 
 // Plain localStorage, so this runs as a standalone page -- no Claude.ai
@@ -564,6 +564,31 @@ function tidalRedirectUri(){
   return window.location.origin + window.location.pathname;
 }
 
+function decodeJwtPayload(token){
+  try{
+    const payload = token.split('.')[1];
+    const padded = payload.replace(/-/g,'+').replace(/_/g,'/').padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
+    return JSON.parse(atob(padded));
+  }catch(e){
+    return null;
+  }
+}
+
+async function fetchTidalUsername(token){
+  const claims = decodeJwtPayload(token);
+  if(!claims || !claims.uid) return null;
+  try{
+    const res = await fetch(`${TIDAL_API_BASE}/users/${claims.uid}`, {
+      headers:{ 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.api+json' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data?.data?.attributes?.username || null;
+  }catch(e){
+    return null;
+  }
+}
+
 async function connectTidal(){
   const verifier = randomPkceString(64);
   const challenge = base64url(await sha256(verifier));
@@ -624,26 +649,36 @@ async function handleTidalCallback(){
     const data = await res.json();
     if(!res.ok) throw new Error(data.error_description || data.error || 'Token exchange failed.');
     const expiresAt = Date.now() + (data.expires_in * 1000);
-    await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({access_token: data.access_token, expires_at: expiresAt}));
+    const username = await fetchTidalUsername(data.access_token);
+    await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({access_token: data.access_token, expires_at: expiresAt, username}));
   }catch(e){
     $('tidalStatus').textContent = `Tidal connection failed: ${e.message}`;
   }
 }
 
-async function getTidalToken(){
+async function getTidalSession(){
   const rec = await storage.get(TIDAL_TOKEN_STORAGE);
   if(!rec || !rec.value) return null;
   const parsed = JSON.parse(rec.value);
   if(!parsed.access_token || Date.now() > parsed.expires_at) return null;
-  return parsed.access_token;
+  return parsed;
+}
+async function getTidalToken(){
+  const session = await getTidalSession();
+  return session ? session.access_token : null;
 }
 
 async function renderTidalStatus(){
-  const token = await getTidalToken();
-  if(token){
+  const session = await getTidalSession();
+  if(session){
     $('btnTidalConnect').classList.add('hidden');
     $('btnTidalDisconnect').classList.remove('hidden');
-    $('tidalStatus').textContent = 'Connected.';
+    let username = session.username;
+    if(!username){
+      username = await fetchTidalUsername(session.access_token);
+      if(username) await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({...session, username}));
+    }
+    $('tidalStatus').textContent = username ? `Connected as ${username}.` : 'Connected.';
   } else {
     $('btnTidalConnect').classList.remove('hidden');
     $('btnTidalDisconnect').classList.add('hidden');
