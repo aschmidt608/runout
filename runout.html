@@ -761,8 +761,7 @@ async function confirmPushToTidal(){
       }
     }
 
-    const link = createData.data.attributes?.externalLinks?.find(l => l.meta?.type === 'TIDAL_SHARING')?.href
-      || `https://listen.tidal.com/playlist/${playlistId}`;
+    const link = `https://tidal.com/playlist/${playlistId}`;
     setStatus($('tidalPushStatus'), `Pushed ${foundIds.length} of ${all.length} tracks to Tidal. <a href="${link}" target="_blank" style="color:var(--teal);">Open playlist</a>`, 'ok');
   }catch(e){
     setStatus($('tidalPushStatus'), e.message || 'Push to Tidal failed.', 'error');
