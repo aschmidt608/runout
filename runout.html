@@ -243,13 +243,44 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     <div class="mast-meta" id="mastMeta"></div>
   </div>
 
+  <!-- STEP 0: API KEY -->
+  <div class="panel" id="panelApiKey">
+    <div class="panel-head">
+      <div class="panel-num">🔑</div>
+      <div class="panel-title">Claude API key</div>
+    </div>
+    <div class="panel-sub">Needed to generate playlists. Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--teal);">console.anthropic.com</a> — it's stored only in this browser's local storage and sent directly to Anthropic from your device, never anywhere else.</div>
+
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+
+    <div class="row-actions" style="margin-top:12px;">
+      <button class="small" id="btnSaveApiKey">Save key</button>
+      <button class="ghost small" id="btnClearApiKey">Clear key</button>
+      <span class="hint" id="apiKeyHint" style="margin:0;"></span>
+    </div>
+  </div>
+
+  <!-- CONNECT TIDAL -->
+  <div class="panel" id="panelTidal">
+    <div class="panel-head">
+      <div class="panel-num">🎧</div>
+      <div class="panel-title">Connect Tidal</div>
+    </div>
+    <div class="panel-sub">Optional — connect your own Tidal account to push a generated set straight into a new Tidal playlist. Track matching is best-effort (search by artist/title), so review before you play out.</div>
+    <div class="row-actions">
+      <button class="small" id="btnTidalConnect">Connect Tidal</button>
+      <button class="ghost small hidden" id="btnTidalDisconnect">Disconnect</button>
+      <span class="hint" id="tidalStatus" style="margin:0;"></span>
+    </div>
+  </div>
+
   <!-- STEP 1: LOAD COLLECTION -->
   <div class="panel" id="panelConnect">
     <div class="panel-head">
       <div class="panel-num">1</div>
       <div class="panel-title">Load the collection</div>
     </div>
-    <div class="panel-sub">This app can't call the Discogs API directly — it runs in a locked-down browser sandbox that blocks outbound requests to anything but Anthropic's own API. Pull your collection with a one-time local script instead; your token never leaves your machine.</div>
+    <div class="panel-sub">Discogs doesn't allow browser-based requests with a personal token, so pull your collection with a one-time local script instead; your token never leaves your machine.</div>
 
     <ol style="font-size:13px;color:var(--text-dim);padding-left:18px;margin:0 0 16px;">
       <li style="margin-bottom:6px;">Get a token at Discogs → Settings → <a href="https://www.discogs.com/settings/developers" target="_blank" style="color:var(--teal);">Developers</a> → "Generate new token."</li>
@@ -348,9 +379,11 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
       <div class="row-actions">
         <button class="ghost small" id="btnCopy">Copy tracklist</button>
         <button class="ghost small" id="btnSave">Save this set</button>
+        <button class="ghost small" id="btnPushTidal">Push to Tidal</button>
         <button class="small" id="btnRegenerate">Regenerate</button>
       </div>
     </div>
+    <div class="status-line hidden" id="tidalPushStatus"></div>
     <div id="sideA"></div>
     <div id="sideB"></div>
   </div>
@@ -389,14 +422,57 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     </div>
   </div>
 
+  <!-- PUSH TO TIDAL MODAL -->
+  <div class="modal-overlay hidden" id="tidalModalOverlay">
+    <div class="modal">
+      <h3>Push to Tidal</h3>
+      <input type="text" id="tidalModalInput" placeholder="e.g. Friday warm-up">
+      <div class="modal-error hidden" id="tidalModalError">Something went wrong — try again.</div>
+      <div class="row-actions">
+        <button class="ghost small" id="tidalModalCancel">Cancel</button>
+        <button class="small" id="tidalModalConfirm">Push</button>
+      </div>
+    </div>
+  </div>
+
   <div class="footnote">
-    Assumptions baked in: the collection comes from a local JSON file (this sandbox can't reach the Discogs API directly, and Discogs' own CSV export leaves out genre/style), so re-run the script when your collection changes. Track duration isn't pulled per-release either, so length is estimated from the avg-minutes-per-track field above. BPM comes from an optional, best-effort GetSongBPM lookup in the fetch script — coverage is partial (weakest for obscure or vinyl-only pressings), so the BPM range filter only excludes releases with a known BPM outside it; anything without a match passes through and falls back to the tempo/mood hint instead. Tidal links open a search for each track rather than auto-adding — full push-to-playlist needs a registered OAuth app with a fixed redirect URI, which this standalone tool doesn't have.
+    Assumptions baked in: your Claude API key, Tidal session, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's and Tidal's own APIs, and nothing persists if you clear your browser data or switch devices. The collection comes from a local JSON file (Discogs' own CSV export leaves out genre/style, and browser-based requests with a personal token aren't practical anyway), so re-run the script when your collection changes. Track duration isn't pulled per-release either, so length is estimated from the avg-minutes-per-track field above. BPM comes from an optional, best-effort GetSongBPM lookup in the fetch script — coverage is partial (weakest for obscure or vinyl-only pressings), so the BPM range filter only excludes releases with a known BPM outside it; anything without a match passes through and falls back to the tempo/mood hint instead. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all, and your Tidal login expires after a few hours (no refresh yet), so you'll occasionally need to reconnect.
   </div>
 
 </div>
 
 <script>
 const STORAGE_COLLECTION = 'discogs-collection';
+const API_KEY_STORAGE = 'anthropic-api-key';
+
+// Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
+// stays a static page). Client ID is a public identifier by design, same as
+// how Spotify/other PKCE clients work -- fine to ship in the page source.
+const TIDAL_CLIENT_ID = 'iyoSzjTEfPxT1uwe';
+const TIDAL_AUTH_URL = 'https://login.tidal.com/authorize';
+const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
+const TIDAL_API_BASE = 'https://openapi.tidal.com/v2';
+const TIDAL_SCOPES = 'playlists.write playlists.read';
+const TIDAL_TOKEN_STORAGE = 'tidal-token';
+
+// Plain localStorage, so this runs as a standalone page -- no Claude.ai
+// artifact sandbox involved. Keeps the get/set/delete/list shape the rest
+// of the app already expects.
+const storage = {
+  async get(key){
+    const v = localStorage.getItem(key);
+    return v === null ? null : { value: v };
+  },
+  async set(key, value){
+    localStorage.setItem(key, value);
+  },
+  async delete(key){
+    localStorage.removeItem(key);
+  },
+  async list(prefix){
+    return { keys: Object.keys(localStorage).filter(k => k.startsWith(prefix)) };
+  }
+};
 
 const state = {
   username:'',
@@ -419,7 +495,16 @@ function spinnerLine(msg){
 /* ---------- init / storage ---------- */
 async function init(){
   try{
-    const coll = await window.storage.get(STORAGE_COLLECTION, false);
+    const key = await storage.get(API_KEY_STORAGE);
+    if(key && key.value){
+      $('apiKeyInput').value = key.value;
+      $('apiKeyHint').textContent = 'Key saved.';
+    }
+  }catch(e){}
+  await handleTidalCallback();
+  await renderTidalStatus();
+  try{
+    const coll = await storage.get(STORAGE_COLLECTION, false);
     if(coll && coll.value){
       const parsed = JSON.parse(coll.value);
       state.collection = parsed.releases || [];
@@ -437,13 +522,228 @@ async function init(){
 }
 
 async function forgetAccount(){
-  try{ await window.storage.delete(STORAGE_COLLECTION, false); }catch(e){}
+  try{ await storage.delete(STORAGE_COLLECTION, false); }catch(e){}
   state.username=''; state.collection=[];
   $('panelFilters').classList.add('hidden');
   $('panelResults').classList.add('hidden');
   $('collectionStats').classList.add('hidden');
   $('mastMeta').innerHTML='';
   setStatus($('connectStatus'), 'Collection cleared.', 'ok');
+}
+
+/* ---------- api key ---------- */
+async function saveApiKey(){
+  const key = $('apiKeyInput').value.trim();
+  if(!key){ $('apiKeyHint').textContent = 'Paste a key first.'; return; }
+  await storage.set(API_KEY_STORAGE, key);
+  $('apiKeyHint').textContent = 'Key saved.';
+}
+
+async function clearApiKey(){
+  await storage.delete(API_KEY_STORAGE);
+  $('apiKeyInput').value = '';
+  $('apiKeyHint').textContent = 'Key cleared.';
+}
+
+/* ---------- tidal oauth (Authorization Code + PKCE) ---------- */
+function base64url(buffer){
+  let str = '';
+  const bytes = new Uint8Array(buffer);
+  for(let i=0;i<bytes.length;i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function randomPkceString(len){
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return base64url(arr.buffer);
+}
+async function sha256(str){
+  return await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+}
+function tidalRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function connectTidal(){
+  const verifier = randomPkceString(64);
+  const challenge = base64url(await sha256(verifier));
+  const state = randomPkceString(16);
+  sessionStorage.setItem('tidal_pkce_verifier', verifier);
+  sessionStorage.setItem('tidal_oauth_state', state);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: TIDAL_CLIENT_ID,
+    redirect_uri: tidalRedirectUri(),
+    scope: TIDAL_SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state
+  });
+  window.location.href = `${TIDAL_AUTH_URL}?${params.toString()}`;
+}
+
+async function disconnectTidal(){
+  await storage.delete(TIDAL_TOKEN_STORAGE);
+  await renderTidalStatus();
+}
+
+async function handleTidalCallback(){
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  const oauthError = url.searchParams.get('error');
+  if(!code && !oauthError) return;
+
+  window.history.replaceState({}, document.title, tidalRedirectUri());
+
+  const expectedState = sessionStorage.getItem('tidal_oauth_state');
+  const verifier = sessionStorage.getItem('tidal_pkce_verifier');
+  sessionStorage.removeItem('tidal_oauth_state');
+  sessionStorage.removeItem('tidal_pkce_verifier');
+
+  if(oauthError){
+    $('tidalStatus').textContent = `Tidal connection failed: ${oauthError}`;
+    return;
+  }
+  if(!verifier || url.searchParams.get('state') !== expectedState){
+    $('tidalStatus').textContent = 'Tidal connection failed: state mismatch, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(TIDAL_TOKEN_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: tidalRedirectUri(),
+        client_id: TIDAL_CLIENT_ID,
+        code_verifier: verifier
+      })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error_description || data.error || 'Token exchange failed.');
+    const expiresAt = Date.now() + (data.expires_in * 1000);
+    await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({access_token: data.access_token, expires_at: expiresAt}));
+  }catch(e){
+    $('tidalStatus').textContent = `Tidal connection failed: ${e.message}`;
+  }
+}
+
+async function getTidalToken(){
+  const rec = await storage.get(TIDAL_TOKEN_STORAGE);
+  if(!rec || !rec.value) return null;
+  const parsed = JSON.parse(rec.value);
+  if(!parsed.access_token || Date.now() > parsed.expires_at) return null;
+  return parsed.access_token;
+}
+
+async function renderTidalStatus(){
+  const token = await getTidalToken();
+  if(token){
+    $('btnTidalConnect').classList.add('hidden');
+    $('btnTidalDisconnect').classList.remove('hidden');
+    $('tidalStatus').textContent = 'Connected.';
+  } else {
+    $('btnTidalConnect').classList.remove('hidden');
+    $('btnTidalDisconnect').classList.add('hidden');
+  }
+}
+
+/* ---------- push to tidal ---------- */
+async function pushToTidal(){
+  if(!state.playlist) return;
+  const token = await getTidalToken();
+  if(!token){
+    setStatus($('tidalPushStatus'), 'Connect Tidal above first.', 'error');
+    return;
+  }
+  openTidalModal();
+}
+
+function openTidalModal(){
+  $('tidalModalError').classList.add('hidden');
+  $('tidalModalInput').value = new Date().toLocaleString();
+  $('tidalModalOverlay').classList.remove('hidden');
+  $('tidalModalInput').focus();
+  $('tidalModalInput').select();
+}
+function closeTidalModal(){
+  $('tidalModalOverlay').classList.add('hidden');
+}
+
+async function tidalSearchTrackId(token, artist, title){
+  const q = encodeURIComponent(`${artist} ${title}`);
+  try{
+    const res = await fetch(`${TIDAL_API_BASE}/searchResults/${q}/relationships/tracks?countryCode=US&include=tracks`, {
+      headers:{ 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.api+json' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const first = (data.data || [])[0];
+    return first ? first.id : null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function confirmPushToTidal(){
+  const name = $('tidalModalInput').value.trim();
+  if(!name) return;
+  const token = await getTidalToken();
+  if(!token){
+    $('tidalModalError').textContent = 'Not connected to Tidal — reconnect and try again.';
+    $('tidalModalError').classList.remove('hidden');
+    return;
+  }
+
+  closeTidalModal();
+  const all = [...state.playlist.sideA, ...state.playlist.sideB];
+  const foundIds = [];
+
+  for(let i=0;i<all.length;i++){
+    setStatus($('tidalPushStatus'), spinnerLine(`Searching Tidal (${i+1}/${all.length})…`));
+    const id = await tidalSearchTrackId(token, all[i].artist, all[i].title);
+    if(id) foundIds.push(id);
+    await new Promise(r => setTimeout(r, 400)); // Tidal's API throttles tightly -- stay well under it
+  }
+
+  if(!foundIds.length){
+    setStatus($('tidalPushStatus'), 'No tracks matched on Tidal — nothing to push.', 'error');
+    return;
+  }
+
+  try{
+    setStatus($('tidalPushStatus'), spinnerLine('Creating Tidal playlist…'));
+    const createRes = await fetch(`${TIDAL_API_BASE}/playlists?countryCode=US`, {
+      method: 'POST',
+      headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/vnd.api+json' },
+      body: JSON.stringify({ data:{ type:'playlists', attributes:{ name, accessType:'UNLISTED' } } })
+    });
+    const createData = await createRes.json();
+    if(!createRes.ok) throw new Error(createData?.errors?.[0]?.detail || 'Could not create the Tidal playlist.');
+    const playlistId = createData.data.id;
+
+    setStatus($('tidalPushStatus'), spinnerLine('Adding tracks…'));
+    for(let i=0;i<foundIds.length;i+=50){
+      const chunk = foundIds.slice(i, i+50);
+      const addRes = await fetch(`${TIDAL_API_BASE}/playlists/${playlistId}/relationships/items?countryCode=US`, {
+        method: 'POST',
+        headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/vnd.api+json' },
+        body: JSON.stringify({ data: chunk.map(id => ({ id, type:'tracks' })) })
+      });
+      if(!addRes.ok){
+        const addData = await addRes.json().catch(()=>({}));
+        throw new Error(addData?.errors?.[0]?.detail || 'Playlist created, but adding tracks failed.');
+      }
+    }
+
+    const link = createData.data.attributes?.externalLinks?.find(l => l.meta?.type === 'TIDAL_SHARING')?.href
+      || `https://listen.tidal.com/playlist/${playlistId}`;
+    setStatus($('tidalPushStatus'), `Pushed ${foundIds.length} of ${all.length} tracks to Tidal. <a href="${link}" target="_blank" style="color:var(--teal);">Open playlist</a>`, 'ok');
+  }catch(e){
+    setStatus($('tidalPushStatus'), e.message || 'Push to Tidal failed.', 'error');
+  }
 }
 
 /* ---------- load collection from local file ---------- */
@@ -464,7 +764,7 @@ function ingestCollectionJson(raw, sourceLabel){
   state.username = parsed.username || '';
   const syncedAt = parsed.syncedAt || Date.now();
 
-  window.storage.set(STORAGE_COLLECTION, JSON.stringify({releases, syncedAt, username: state.username}), false).catch(()=>{});
+  storage.set(STORAGE_COLLECTION, JSON.stringify({releases, syncedAt, username: state.username}), false).catch(()=>{});
 
   deriveFacets();
   renderCollectionStats(syncedAt);
@@ -582,6 +882,11 @@ function shuffledSample(arr, n){
 }
 
 async function generatePlaylist(){
+  const apiKey = $('apiKeyInput').value.trim();
+  if(!apiKey){
+    setStatus($('generateStatus'), 'Add your Claude API key above first.', 'error');
+    return;
+  }
   if(!state.candidates.length){
     setStatus($('generateStatus'), 'No releases match the current filters — loosen them up.', 'error');
     return;
@@ -628,7 +933,12 @@ Rules:
   try{
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
       body: JSON.stringify({
         model:'claude-sonnet-4-6',
         max_tokens: 4000,
@@ -636,6 +946,10 @@ Rules:
         messages:[{role:'user', content: userPrompt}]
       })
     });
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>({}));
+      throw new Error(errBody?.error?.message || `Anthropic API returned HTTP ${res.status}`);
+    }
     const data = await res.json();
     const textBlocks = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n');
     const clean = textBlocks.replace(/```json|```/g,'').trim();
@@ -782,7 +1096,7 @@ async function confirmSavePlaylist(){
   if(!label) return;
   const key = `playlist-${Date.now()}`;
   try{
-    await window.storage.set(key, JSON.stringify({...state.playlist, label}), false);
+    await storage.set(key, JSON.stringify({...state.playlist, label}), false);
     await renderSavedSets();
     closeSaveModal();
     $('btnSave').textContent = 'Saved';
@@ -794,13 +1108,13 @@ async function confirmSavePlaylist(){
 
 async function renderSavedSets(){
   try{
-    const list = await window.storage.list('playlist-', false);
+    const list = await storage.list('playlist-', false);
     if(!list || !list.keys || !list.keys.length){
       $('panelSaved').classList.add('hidden');
       return;
     }
     $('panelSaved').classList.remove('hidden');
-    const items = await Promise.all(list.keys.map(k => window.storage.get(k, false)));
+    const items = await Promise.all(list.keys.map(k => storage.get(k, false)));
     const parsed = items.filter(Boolean).map(i => ({...JSON.parse(i.value), key:i.key}))
       .sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
     $('savedList').innerHTML = parsed.map(p => {
@@ -826,7 +1140,7 @@ async function renderSavedSets(){
     });
     [...$('savedList').querySelectorAll('[data-del]')].forEach(b=>{
       b.addEventListener('click', async ()=>{
-        await window.storage.delete(b.dataset.del, false);
+        await storage.delete(b.dataset.del, false);
         renderSavedSets();
       });
     });
@@ -835,17 +1149,28 @@ async function renderSavedSets(){
 
 /* ---------- wiring ---------- */
 wireFileLoader();
+$('btnSaveApiKey').addEventListener('click', saveApiKey);
+$('btnClearApiKey').addEventListener('click', clearApiKey);
+$('btnTidalConnect').addEventListener('click', connectTidal);
+$('btnTidalDisconnect').addEventListener('click', disconnectTidal);
 $('btnForget').addEventListener('click', forgetAccount);
 $('btnGenerate').addEventListener('click', generatePlaylist);
 $('btnRegenerate').addEventListener('click', generatePlaylist);
 $('btnCopy').addEventListener('click', copyTracklist);
 $('btnSave').addEventListener('click', savePlaylist);
+$('btnPushTidal').addEventListener('click', pushToTidal);
 $('copyModalClose').addEventListener('click', closeCopyModal);
 $('saveModalCancel').addEventListener('click', closeSaveModal);
 $('saveModalConfirm').addEventListener('click', confirmSavePlaylist);
 $('saveModalInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter') confirmSavePlaylist();
   if(e.key === 'Escape') closeSaveModal();
+});
+$('tidalModalCancel').addEventListener('click', closeTidalModal);
+$('tidalModalConfirm').addEventListener('click', confirmPushToTidal);
+$('tidalModalInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') confirmPushToTidal();
+  if(e.key === 'Escape') closeTidalModal();
 });
 ['yearMin','yearMax','bpmMin','bpmMax'].forEach(id => $(id).addEventListener('input', applyFilters));
 [...$('durToggle').children].forEach(b => b.addEventListener('click', ()=> setDurMode(b.dataset.mode)));
