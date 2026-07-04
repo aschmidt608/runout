@@ -279,13 +279,29 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     </div>
   </div>
 
+  <!-- CONNECT DISCOGS -->
+  <div class="panel" id="panelDiscogs">
+    <div class="panel-head">
+      <div class="panel-num">💿</div>
+      <div class="panel-title">Connect Discogs</div>
+    </div>
+    <div class="panel-sub">Log in to fetch your collection automatically — no local script needed. BPM enrichment isn't included in this path yet; use the manual method below if you want that too.</div>
+    <div class="row-actions">
+      <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
+      <button class="ghost small hidden" id="btnDiscogsDisconnect">Disconnect</button>
+      <button class="ghost small hidden" id="btnDiscogsRefresh">Refresh collection</button>
+      <span class="hint" id="discogsStatus" style="margin:0;"></span>
+    </div>
+    <div class="status-line hidden" id="discogsFetchStatus"></div>
+  </div>
+
   <!-- STEP 1: LOAD COLLECTION -->
   <div class="panel" id="panelConnect">
     <div class="panel-head">
       <div class="panel-num">1</div>
-      <div class="panel-title">Load the collection</div>
+      <div class="panel-title">Load the collection manually</div>
     </div>
-    <div class="panel-sub">Discogs doesn't allow browser-based requests with a personal token, so pull your collection with a one-time local script instead; your token never leaves your machine.</div>
+    <div class="panel-sub">Alternative to connecting Discogs above — useful if you'd rather not log in here, or want BPM enrichment (which the local script supports and the Connect Discogs path above doesn't yet).</div>
 
     <ol style="font-size:13px;color:var(--text-dim);padding-left:18px;margin:0 0 16px;">
       <li style="margin-bottom:6px;">Get a token at Discogs → Settings → <a href="https://www.discogs.com/settings/developers" target="_blank" style="color:var(--teal);">Developers</a> → "Generate new token."</li>
@@ -441,7 +457,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
   </div>
 
   <div class="footnote">
-    Assumptions baked in: your Claude API key, Tidal session, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's and Tidal's own APIs, and nothing persists if you clear your browser data or switch devices. The collection comes from a local JSON file (Discogs' own CSV export leaves out genre/style, and browser-based requests with a personal token aren't practical anyway), so re-run the script when your collection changes. Track duration isn't pulled per-release either, so length is estimated from the avg-minutes-per-track field above. BPM comes from an optional, best-effort GetSongBPM lookup in the fetch script — coverage is partial (weakest for obscure or vinyl-only pressings), so the BPM range filter only excludes releases with a known BPM outside it; anything without a match passes through and falls back to the tempo/mood hint instead. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all, and your Tidal login expires after a few hours (no refresh yet), so you'll occasionally need to reconnect.
+    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too and is currently the only path with BPM enrichment (an optional, best-effort GetSongBPM lookup — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint). Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all, and both the Tidal and Discogs logins expire after a while (no refresh yet), so you'll occasionally need to reconnect.
   </div>
 
 </div>
@@ -449,6 +465,12 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 <script>
 const STORAGE_COLLECTION = 'discogs-collection';
 const API_KEY_STORAGE = 'anthropic-api-key';
+
+// Discogs OAuth 1.0a needs a Consumer Secret to sign every authenticated
+// request, which can't safely live in this page's JS -- this Worker holds
+// it and signs requests on our behalf. See discogs-oauth-worker/ in the repo.
+const DISCOGS_WORKER_URL = 'https://runout-discogs-oauth.thierryennuimusic.workers.dev';
+const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
 
 // Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
 // stays a static page). Client ID is a public identifier by design, same as
@@ -508,6 +530,8 @@ async function init(){
   }catch(e){}
   await handleTidalCallback();
   await renderTidalStatus();
+  await handleDiscogsCallback();
+  await renderDiscogsStatus();
   try{
     const coll = await storage.get(STORAGE_COLLECTION, false);
     if(coll && coll.value){
@@ -773,7 +797,181 @@ async function confirmPushToTidal(){
   }
 }
 
+/* ---------- discogs oauth (1.0a via signing worker) ---------- */
+function discogsRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function connectDiscogs(){
+  try{
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/request-token`, {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ callbackUrl: discogsRedirectUri() })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Could not start Discogs login.');
+    sessionStorage.setItem('discogs_oauth_token_secret', data.oauth_token_secret);
+    window.location.href = `https://www.discogs.com/oauth/authorize?oauth_token=${encodeURIComponent(data.oauth_token)}`;
+  }catch(e){
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+async function disconnectDiscogs(){
+  await storage.delete(DISCOGS_TOKEN_STORAGE);
+  await renderDiscogsStatus();
+}
+
+async function handleDiscogsCallback(){
+  const url = new URL(window.location.href);
+  const oauthToken = url.searchParams.get('oauth_token');
+  const oauthVerifier = url.searchParams.get('oauth_verifier');
+  if(!oauthToken || !oauthVerifier) return;
+
+  window.history.replaceState({}, document.title, discogsRedirectUri());
+
+  const tokenSecret = sessionStorage.getItem('discogs_oauth_token_secret');
+  sessionStorage.removeItem('discogs_oauth_token_secret');
+  if(!tokenSecret){
+    $('discogsStatus').textContent = 'Discogs connection failed: missing session state, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/access-token`, {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ oauth_token: oauthToken, oauth_token_secret: tokenSecret, oauth_verifier: oauthVerifier })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Token exchange failed.');
+    await storage.set(DISCOGS_TOKEN_STORAGE, JSON.stringify({ oauth_token: data.oauth_token, oauth_token_secret: data.oauth_token_secret }));
+    await fetchDiscogsCollection();
+  }catch(e){
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+async function getDiscogsSession(){
+  const rec = await storage.get(DISCOGS_TOKEN_STORAGE);
+  if(!rec || !rec.value) return null;
+  return JSON.parse(rec.value);
+}
+
+async function discogsApiCall(path, method){
+  const session = await getDiscogsSession();
+  if(!session) throw new Error('Not connected to Discogs.');
+  const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/proxy`, {
+    method: 'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: method || 'GET' })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.message || data.error || `Discogs API error (${res.status})`);
+  return data;
+}
+
+async function ensureDiscogsUsername(session){
+  if(session.username) return session.username;
+  try{
+    const identity = await discogsApiCall('/oauth/identity');
+    await storage.set(DISCOGS_TOKEN_STORAGE, JSON.stringify({...session, username: identity.username}));
+    return identity.username;
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderDiscogsStatus(){
+  const session = await getDiscogsSession();
+  if(session){
+    $('btnDiscogsConnect').classList.add('hidden');
+    $('btnDiscogsDisconnect').classList.remove('hidden');
+    $('btnDiscogsRefresh').classList.remove('hidden');
+    const username = await ensureDiscogsUsername(session);
+    $('discogsStatus').textContent = username ? `Connected as ${username}.` : 'Connected.';
+  } else {
+    $('btnDiscogsConnect').classList.remove('hidden');
+    $('btnDiscogsDisconnect').classList.add('hidden');
+    $('btnDiscogsRefresh').classList.add('hidden');
+  }
+}
+
+function stripDiscogsArtistSuffix(name){
+  // Discogs disambiguates same-named artists with a trailing " (2)" etc.
+  return name.replace(/\s*\(\d+\)$/, '');
+}
+
+async function fetchDiscogsCollection(){
+  const session = await getDiscogsSession();
+  if(!session){
+    $('discogsStatus').textContent = 'Connect Discogs first.';
+    return;
+  }
+  const username = await ensureDiscogsUsername(session);
+  if(!username){
+    setStatus($('discogsFetchStatus'), 'Could not identify your Discogs account — try reconnecting.', 'error');
+    return;
+  }
+
+  setStatus($('discogsFetchStatus'), spinnerLine('Fetching your Discogs collection…'));
+  try{
+    const allReleases = [];
+    let page = 1, totalPages = 1;
+    do{
+      setStatus($('discogsFetchStatus'), spinnerLine(`Fetching page ${page} of ${totalPages}…`));
+      const path = `/users/${encodeURIComponent(username)}/collection/folders/0/releases?per_page=100&page=${page}&sort=artist`;
+      const data = await discogsApiCall(path);
+      allReleases.push(...(data.releases || []));
+      totalPages = data.pagination?.pages || 1;
+      page++;
+      if(page <= totalPages) await new Promise(r => setTimeout(r, 1100)); // stay comfortably under Discogs' 60 req/min limit
+    } while(page <= totalPages);
+
+    const releases = allReleases.map(r => {
+      const bi = r.basic_information || {};
+      const artists = bi.artists || [];
+      const artistName = artists.map(a => stripDiscogsArtistSuffix(a.name)).join(', ') || 'Unknown Artist';
+      return {
+        id: r.id,
+        artist: artistName,
+        title: bi.title || 'Untitled',
+        year: bi.year || null,
+        genres: bi.genres || [],
+        styles: bi.styles || [],
+        labels: (bi.labels || []).map(l => l.name),
+        format: (bi.formats || []).map(f => f.name).join(', '),
+        resourceUrl: `https://www.discogs.com/release/${bi.id || r.id}`,
+        bpm: null
+      };
+    });
+
+    if(!releases.length){
+      setStatus($('discogsFetchStatus'), 'No releases found in your Discogs collection.', 'error');
+      return;
+    }
+
+    applyCollection(releases, username, Date.now());
+    setStatus($('discogsFetchStatus'), `Loaded ${releases.length} releases from Discogs.`, 'ok');
+  }catch(e){
+    setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
+  }
+}
+
 /* ---------- load collection from local file ---------- */
+function applyCollection(releases, username, syncedAt){
+  state.collection = releases;
+  state.username = username || '';
+  storage.set(STORAGE_COLLECTION, JSON.stringify({releases, syncedAt, username: state.username}), false).catch(()=>{});
+
+  deriveFacets();
+  renderCollectionStats(syncedAt);
+  renderFilters();
+  $('panelFilters').classList.remove('hidden');
+  $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded just now`;
+}
+
 function ingestCollectionJson(raw, sourceLabel){
   let parsed;
   try{
@@ -787,17 +985,7 @@ function ingestCollectionJson(raw, sourceLabel){
     setStatus($('connectStatus'), `${sourceLabel} has no releases in it.`, 'error');
     return;
   }
-  state.collection = releases;
-  state.username = parsed.username || '';
-  const syncedAt = parsed.syncedAt || Date.now();
-
-  storage.set(STORAGE_COLLECTION, JSON.stringify({releases, syncedAt, username: state.username}), false).catch(()=>{});
-
-  deriveFacets();
-  renderCollectionStats(syncedAt);
-  renderFilters();
-  $('panelFilters').classList.remove('hidden');
-  $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded just now`;
+  applyCollection(releases, parsed.username, parsed.syncedAt || Date.now());
   setStatus($('connectStatus'), `Loaded ${releases.length} releases.`, 'ok');
 }
 
@@ -1190,6 +1378,9 @@ $('btnSaveApiKey').addEventListener('click', saveApiKey);
 $('btnClearApiKey').addEventListener('click', clearApiKey);
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
+$('btnDiscogsConnect').addEventListener('click', connectDiscogs);
+$('btnDiscogsDisconnect').addEventListener('click', disconnectDiscogs);
+$('btnDiscogsRefresh').addEventListener('click', fetchDiscogsCollection);
 $('btnForget').addEventListener('click', forgetAccount);
 $('btnGenerate').addEventListener('click', generatePlaylist);
 $('btnRegenerate').addEventListener('click', generatePlaylist);
