@@ -516,6 +516,11 @@ const GETSONGBPM_KEY_STORAGE = 'getsongbpm-api-key';
 const GETSONGBPM_SEARCH_URL = 'https://api.getsong.co/search/';
 const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
 
+// Guards against overlapping fetchDiscogsCollection() runs -- e.g. clicking
+// Refresh while a fetch (or its BPM lookups) is still in flight -- which
+// would double up requests and blow past Discogs' rate limit.
+let discogsFetchInFlight = false;
+
 // Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
 // stays a static page). Client ID is a public identifier by design, same as
 // how Spotify/other PKCE clients work -- fine to ship in the page source.
@@ -984,6 +989,10 @@ function stripDiscogsArtistSuffix(name){
 }
 
 async function fetchDiscogsCollection(){
+  if(discogsFetchInFlight){
+    setStatus($('discogsFetchStatus'), 'Already fetching — hang tight.', 'error');
+    return;
+  }
   const session = await getDiscogsSession();
   if(!session){
     $('discogsStatus').textContent = 'Connect Discogs first.';
@@ -995,6 +1004,8 @@ async function fetchDiscogsCollection(){
     return;
   }
 
+  discogsFetchInFlight = true;
+  $('btnDiscogsRefresh').disabled = true;
   setStatus($('discogsFetchStatus'), spinnerLine('Fetching your Discogs collection…'));
   try{
     const allReleases = [];
@@ -1051,6 +1062,9 @@ async function fetchDiscogsCollection(){
       : `Loaded ${releases.length} releases from Discogs.`, 'ok');
   }catch(e){
     setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
+  }finally{
+    discogsFetchInFlight = false;
+    $('btnDiscogsRefresh').disabled = false;
   }
 }
 
