@@ -190,6 +190,11 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 .track-body{flex:1;min-width:0;}
 .track-title{font-size:15px;font-weight:500;}
 .track-title .yr{color:var(--text-faint);font-weight:400;}
+.track-bpm{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+  color:var(--amber);border:1px solid var(--amber-dim);border-radius:2px;
+  padding:1px 6px;margin-left:8px;white-space:nowrap;
+}
 .track-tags{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:2px;}
 .track-note{font-size:13px;color:var(--text-dim);font-style:italic;margin-top:6px;line-height:1.45;}
 .track-links{display:flex;gap:10px;margin-top:8px;}
@@ -1027,7 +1032,7 @@ function renderSide(elId, headerText, numLabel, tracks){
     <div class="track">
       <div class="track-num">${numLabel}${i+1}</div>
       <div class="track-body">
-        <div class="track-title">${escapeHtml(t.artist)} — ${escapeHtml(t.title)} <span class="yr">${t.year||''}</span></div>
+        <div class="track-title">${escapeHtml(t.artist)} — ${escapeHtml(t.title)} <span class="yr">${t.year||''}</span>${t.bpm ? `<span class="track-bpm">${t.bpm} BPM</span>` : ''}</div>
         <div class="track-tags">${[...(t.genres||[]), ...(t.styles||[])].join(' · ')}</div>
         ${t.note ? `<div class="track-note">${escapeHtml(t.note)}</div>` : ''}
         <div class="track-links">
