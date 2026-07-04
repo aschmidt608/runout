@@ -310,7 +310,16 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 
     <!-- CONNECT DISCOGS -->
     <div class="source-pane" id="paneConnect">
-      <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed. BPM enrichment isn't included in this path yet; use "Load manually" if you want that too.</div>
+      <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed.</div>
+
+      <label>GetSongBPM API key <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional — get a free one at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">getsongbpm.com/api</a>, coverage will be partial)</span></label>
+      <input type="password" id="bpmKeyInput" placeholder="Paste your GetSongBPM API key">
+      <div class="row-actions" style="margin-top:8px;margin-bottom:16px;">
+        <button class="ghost small" id="btnSaveBpmKey">Save key</button>
+        <button class="ghost small" id="btnClearBpmKey">Clear key</button>
+        <span class="hint" id="bpmKeyHint" style="margin:0;"></span>
+      </div>
+
       <div class="row-actions">
         <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
         <button class="ghost small hidden" id="btnDiscogsDisconnect">Disconnect</button>
@@ -322,7 +331,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 
     <!-- LOAD MANUALLY -->
     <div class="source-pane hidden" id="paneManual">
-      <div class="panel-sub" style="margin-left:0;">Useful if you'd rather not log in above, or want BPM enrichment (which the local script supports and Connect Discogs doesn't yet).</div>
+      <div class="panel-sub" style="margin-left:0;">Alternative to connecting Discogs above, if you'd rather not log in here.</div>
 
       <ol style="font-size:13px;color:var(--text-dim);padding-left:18px;margin:0 0 16px;">
         <li style="margin-bottom:6px;">Get a token at Discogs → Settings → <a href="https://www.discogs.com/settings/developers" target="_blank" style="color:var(--teal);">Developers</a> → "Generate new token."</li>
@@ -497,6 +506,12 @@ const API_KEY_STORAGE = 'anthropic-api-key';
 const DISCOGS_WORKER_URL = 'https://runout-discogs-oauth.thierryennuimusic.workers.dev';
 const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
 
+// GetSongBPM's API sends permissive CORS headers (access-control-allow-origin: *),
+// so this can be called directly from the browser -- no Worker needed.
+const GETSONGBPM_KEY_STORAGE = 'getsongbpm-api-key';
+const GETSONGBPM_SEARCH_URL = 'https://api.getsong.co/search/';
+const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
+
 // Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
 // stays a static page). Client ID is a public identifier by design, same as
 // how Spotify/other PKCE clients work -- fine to ship in the page source.
@@ -554,6 +569,13 @@ async function init(){
       $('apiKeyHint').textContent = 'Key saved.';
     }
   }catch(e){}
+  try{
+    const bpmKey = await storage.get(GETSONGBPM_KEY_STORAGE);
+    if(bpmKey && bpmKey.value){
+      $('bpmKeyInput').value = bpmKey.value;
+      $('bpmKeyHint').textContent = 'Key saved.';
+    }
+  }catch(e){}
   await handleTidalCallback();
   await renderTidalStatus();
   await handleDiscogsCallback();
@@ -598,6 +620,34 @@ async function clearApiKey(){
   await storage.delete(API_KEY_STORAGE);
   $('apiKeyInput').value = '';
   $('apiKeyHint').textContent = 'Key cleared.';
+}
+
+async function saveBpmKey(){
+  const key = $('bpmKeyInput').value.trim();
+  if(!key){ $('bpmKeyHint').textContent = 'Paste a key first.'; return; }
+  await storage.set(GETSONGBPM_KEY_STORAGE, key);
+  $('bpmKeyHint').textContent = 'Key saved.';
+}
+
+async function clearBpmKey(){
+  await storage.delete(GETSONGBPM_KEY_STORAGE);
+  $('bpmKeyInput').value = '';
+  $('bpmKeyHint').textContent = 'Key cleared.';
+}
+
+async function getSongBpmLookup(apiKey, artist, title){
+  const lookup = `song:${title} artist:${artist}`;
+  const url = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}&type=song&lookup=${encodeURIComponent(lookup)}`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const tempo = data?.search?.[0]?.tempo;
+    const bpm = Math.round(parseFloat(tempo));
+    return Number.isFinite(bpm) ? bpm : null;
+  }catch(e){
+    return null;
+  }
 }
 
 /* ---------- tidal oauth (Authorization Code + PKCE) ---------- */
@@ -978,8 +1028,22 @@ async function fetchDiscogsCollection(){
       return;
     }
 
+    const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
+    const bpmKey = bpmKeyRec && bpmKeyRec.value;
+    let bpmFound = 0;
+    if(bpmKey){
+      for(let i=0;i<releases.length;i++){
+        setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM (${i+1}/${releases.length})…`));
+        const bpm = await getSongBpmLookup(bpmKey, releases[i].artist, releases[i].title);
+        if(bpm){ releases[i].bpm = bpm; bpmFound++; }
+        await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
+      }
+    }
+
     applyCollection(releases, username, Date.now());
-    setStatus($('discogsFetchStatus'), `Loaded ${releases.length} releases from Discogs.`, 'ok');
+    setStatus($('discogsFetchStatus'), bpmKey
+      ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound}.`
+      : `Loaded ${releases.length} releases from Discogs.`, 'ok');
   }catch(e){
     setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
   }
@@ -1440,6 +1504,8 @@ wireFileLoader();
 });
 $('btnSaveApiKey').addEventListener('click', saveApiKey);
 $('btnClearApiKey').addEventListener('click', clearApiKey);
+$('btnSaveBpmKey').addEventListener('click', saveBpmKey);
+$('btnClearBpmKey').addEventListener('click', clearBpmKey);
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
 $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
