@@ -887,6 +887,16 @@ function discogsRedirectUri(){
   return window.location.origin + window.location.pathname;
 }
 
+async function safeJson(res){
+  const text = await res.text();
+  if(!text) throw new Error(`Empty response from server (HTTP ${res.status}). Please try again in a moment.`);
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error(`Server returned an unexpected response (HTTP ${res.status}).`);
+  }
+}
+
 async function connectDiscogs(){
   try{
     const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/request-token`, {
@@ -894,7 +904,7 @@ async function connectDiscogs(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ callbackUrl: discogsRedirectUri() })
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if(!res.ok) throw new Error(data.error || 'Could not start Discogs login.');
     sessionStorage.setItem('discogs_oauth_token_secret', data.oauth_token_secret);
     window.location.href = `https://www.discogs.com/oauth/authorize?oauth_token=${encodeURIComponent(data.oauth_token)}`;
@@ -929,7 +939,7 @@ async function handleDiscogsCallback(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ oauth_token: oauthToken, oauth_token_secret: tokenSecret, oauth_verifier: oauthVerifier })
     });
-    const data = await res.json();
+    const data = await safeJson(res);
     if(!res.ok) throw new Error(data.error || 'Token exchange failed.');
     await storage.set(DISCOGS_TOKEN_STORAGE, JSON.stringify({ oauth_token: data.oauth_token, oauth_token_secret: data.oauth_token_secret }));
     await fetchDiscogsCollection();
@@ -952,7 +962,7 @@ async function discogsApiCall(path, method){
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: method || 'GET' })
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if(!res.ok) throw new Error(data.message || data.error || `Discogs API error (${res.status})`);
   return data;
 }
