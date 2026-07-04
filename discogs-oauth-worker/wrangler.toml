@@ -1,0 +1,8 @@
+name = "runout-discogs-oauth"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# Secrets (DISCOGS_CONSUMER_KEY, DISCOGS_CONSUMER_SECRET) are NOT set here --
+# set them with `wrangler secret put DISCOGS_CONSUMER_KEY` (and _SECRET), or
+# via the Cloudflare dashboard's Worker > Settings > Variables page. Never
+# commit them to this file or anywhere in the repo.
