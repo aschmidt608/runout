@@ -21,5 +21,5 @@ lives in the browser's own `localStorage`, same as everything else in Runout.
 ## Endpoints
 
 - `POST /discogs/request-token` `{ callbackUrl }` -> `{ oauth_token, oauth_token_secret }`
-- `POST /discogs/access-token` `{ oauth_token, oauth_token_secret, oauth_verifier }` -> `{ oauth_token, oauth_token_secret, username }`
+- `POST /discogs/access-token` `{ oauth_token, oauth_token_secret, oauth_verifier }` -> `{ oauth_token, oauth_token_secret }` (Discogs doesn't return a username here -- call `/discogs/proxy` with `path: "/oauth/identity"` afterward to get it)
 - `POST /discogs/proxy` `{ oauth_token, oauth_token_secret, path, method? }` -> whatever Discogs returns for that path, passed through as-is

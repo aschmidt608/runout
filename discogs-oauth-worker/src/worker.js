@@ -11,7 +11,9 @@
  * Endpoints:
  *   POST /discogs/request-token  { callbackUrl } -> { oauth_token, oauth_token_secret }
  *   POST /discogs/access-token   { oauth_token, oauth_token_secret, oauth_verifier }
- *                                -> { oauth_token, oauth_token_secret, username }
+ *                                -> { oauth_token, oauth_token_secret }
+ *                                (no username here -- call /discogs/proxy with
+ *                                path "/oauth/identity" afterward to get it)
  *   POST /discogs/proxy          { oauth_token, oauth_token_secret, path, method? }
  *                                -> whatever Discogs returns, passed through as-is
  */
@@ -154,8 +156,7 @@ export default {
         const parsed = parseFormBody(text);
         return json({
           oauth_token: parsed.oauth_token,
-          oauth_token_secret: parsed.oauth_token_secret,
-          username: parsed.username || null
+          oauth_token_secret: parsed.oauth_token_secret
         }, 200, origin);
       }
 
