@@ -976,7 +976,17 @@ Rules:
     const data = await res.json();
     const textBlocks = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n');
     const clean = textBlocks.replace(/```json|```/g,'').trim();
-    const picks = JSON.parse(clean);
+    // Claude is instructed to respond with only JSON, but sometimes prefaces
+    // it with a caveat (e.g. when the pool is too small to hit the target
+    // count) -- pull out the array itself rather than assume the whole
+    // response is clean JSON.
+    const arrayMatch = clean.match(/\[[\s\S]*\]/);
+    let picks;
+    try{
+      picks = JSON.parse(arrayMatch ? arrayMatch[0] : clean);
+    }catch(e){
+      throw new Error('Claude didn\'t return usable JSON — try regenerating, or loosen filters if the candidate pool is very small.');
+    }
 
     const byId = new Map(pool.map(r=>[String(r.id), r]));
     const tracks = picks
