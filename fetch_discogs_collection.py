@@ -106,6 +106,9 @@ def main():
             "styles": bi.get("styles", []),
             "labels": [l.get("name") for l in bi.get("labels", [])],
             "format": ", ".join(f.get("name", "") for f in bi.get("formats", [])),
+            "formatDescriptors": [
+                d for f in bi.get("formats", []) for d in f.get("descriptions", [])
+            ],
             "resourceUrl": f"https://www.discogs.com/release/{bi.get('id', r.get('id'))}",
             "bpm": None,
         })

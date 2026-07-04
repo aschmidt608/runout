@@ -370,6 +370,10 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     <div class="chip-group" id="styleChips"></div>
     <button type="button" class="chip-more hidden" id="styleChipsMore"></button>
 
+    <label style="margin-top:14px;">Media format <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(7"/45s, 12"/LPs, etc. — only for releases with format data)</span></label>
+    <div class="chip-group" id="formatChips"></div>
+    <button type="button" class="chip-more hidden" id="formatChipsMore"></button>
+
     <div class="field-row" style="margin-top:14px;">
       <div class="field">
         <label>Year range</label>
@@ -491,7 +495,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
   </div>
 
   <div class="footnote">
-    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
+    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
   </div>
 
 </div>
@@ -543,10 +547,10 @@ const storage = {
 
 const state = {
   username:'',
-  collection:[], genres:[], styles:[],
-  selectedGenres:new Set(), selectedStyles:new Set(),
+  collection:[], genres:[], styles:[], formats:[],
+  selectedGenres:new Set(), selectedStyles:new Set(), selectedFormats:new Set(),
   candidates:[], playlist:null,
-  chipExpanded:{ genre:false, style:false }
+  chipExpanded:{ genre:false, style:false, format:false }
 };
 
 const $ = id => document.getElementById(id);
@@ -1018,6 +1022,7 @@ async function fetchDiscogsCollection(){
         styles: bi.styles || [],
         labels: (bi.labels || []).map(l => l.name),
         format: (bi.formats || []).map(f => f.name).join(', '),
+        formatDescriptors: (bi.formats || []).flatMap(f => f.descriptions || []),
         resourceUrl: `https://www.discogs.com/release/${bi.id || r.id}`,
         bpm: null
       };
@@ -1110,13 +1115,15 @@ function wireFileLoader(){
 }
 
 function deriveFacets(){
-  const g = new Set(), s = new Set();
+  const g = new Set(), s = new Set(), f = new Set();
   state.collection.forEach(r=>{
     r.genres.forEach(x=>g.add(x));
     r.styles.forEach(x=>s.add(x));
+    (r.formatDescriptors||[]).forEach(x=>f.add(x));
   });
   state.genres = [...g].sort();
   state.styles = [...s].sort();
+  state.formats = [...f].sort();
 }
 
 function renderCollectionStats(syncedAt){
@@ -1137,6 +1144,7 @@ const CHIP_DISPLAY_LIMIT = 16;
 function renderFilters(){
   renderChipGroup('genreChips', 'genreChipsMore', 'genre', state.genres, state.selectedGenres);
   renderChipGroup('styleChips', 'styleChipsMore', 'style', state.styles, state.selectedStyles);
+  renderChipGroup('formatChips', 'formatChipsMore', 'format', state.formats, state.selectedFormats);
   applyFilters();
 }
 function renderChipGroup(elId, moreBtnId, expandKey, values, selectedSet){
@@ -1188,6 +1196,7 @@ function applyFilters(){
   state.candidates = state.collection.filter(r=>{
     if(state.selectedGenres.size && !r.genres.some(g=>state.selectedGenres.has(g))) return false;
     if(state.selectedStyles.size && !r.styles.some(s=>state.selectedStyles.has(s))) return false;
+    if(state.selectedFormats.size && !(r.formatDescriptors||[]).some(f=>state.selectedFormats.has(f))) return false;
     if(r.year && (r.year < yMin || r.year > yMax)) return false;
     if(r.bpm && (r.bpm < bpmMin || r.bpm > bpmMax)) return false;
     return true;
@@ -1258,6 +1267,7 @@ Rules:
     target_track_count: targetCount,
     genre_filters: [...state.selectedGenres],
     style_filters: [...state.selectedStyles],
+    format_filters: [...state.selectedFormats],
     tempo_mood_origin_hint: vibeHint || null,
     additional_notes: extraNotes || null
   });
