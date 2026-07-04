@@ -2,7 +2,7 @@
 
 Discogs only supports OAuth 1.0a, which requires the Consumer Secret to sign
 every authenticated request (not just the initial handshake). That secret
-can't safely live in `runout.html`'s client-side JS, so this Worker holds it
+can't safely live in `index.html`'s client-side JS, so this Worker holds it
 and does the signing on the browser's behalf -- the resulting access token
 lives in the browser's own `localStorage`, same as everything else in Runout.
 
@@ -16,7 +16,7 @@ lives in the browser's own `localStorage`, same as everything else in Runout.
    wrangler secret put DISCOGS_CONSUMER_SECRET
    ```
 4. Deploy: `wrangler deploy`
-5. Note the URL wrangler prints (looks like `https://runout-discogs-oauth.<your-subdomain>.workers.dev`) -- that's what `runout.html` needs to call.
+5. Note the URL wrangler prints (looks like `https://runout-discogs-oauth.<your-subdomain>.workers.dev`) -- that's what `index.html` needs to call.
 
 ## Endpoints
 
