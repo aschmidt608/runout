@@ -296,6 +296,20 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     </div>
   </div>
 
+  <!-- CONNECT SPOTIFY -->
+  <div class="panel" id="panelSpotify">
+    <div class="panel-head">
+      <div class="panel-num">🎵</div>
+      <div class="panel-title">Connect Spotify</div>
+    </div>
+    <div class="panel-sub">Optional — connect your own Spotify account to push a generated set straight into a new Spotify playlist. Track matching is best-effort (search by artist/title), so review before you play out.</div>
+    <div class="row-actions">
+      <button class="small" id="btnSpotifyConnect">Connect Spotify</button>
+      <button class="ghost small hidden" id="btnSpotifyDisconnect">Disconnect</button>
+      <span class="hint" id="spotifyStatus" style="margin:0;"></span>
+    </div>
+  </div>
+
   <!-- STEP 1: LOAD COLLECTION -->
   <div class="panel" id="panelConnect">
     <div class="panel-head">
@@ -439,10 +453,12 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
         <button class="ghost small" id="btnCopy">Copy tracklist</button>
         <button class="ghost small" id="btnSave">Save this set</button>
         <button class="ghost small" id="btnPushTidal">Push to Tidal</button>
+        <button class="ghost small" id="btnPushSpotify">Push to Spotify</button>
         <button class="small" id="btnRegenerate">Regenerate</button>
       </div>
     </div>
     <div class="status-line hidden" id="tidalPushStatus"></div>
+    <div class="status-line hidden" id="spotifyPushStatus"></div>
     <div id="sideA"></div>
     <div id="sideB"></div>
   </div>
@@ -494,8 +510,21 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     </div>
   </div>
 
+  <!-- PUSH TO SPOTIFY MODAL -->
+  <div class="modal-overlay hidden" id="spotifyModalOverlay">
+    <div class="modal">
+      <h3>Push to Spotify</h3>
+      <input type="text" id="spotifyModalInput" placeholder="e.g. Friday warm-up">
+      <div class="modal-error hidden" id="spotifyModalError">Something went wrong — try again.</div>
+      <div class="row-actions">
+        <button class="ghost small" id="spotifyModalCancel">Cancel</button>
+        <button class="small" id="spotifyModalConfirm">Push</button>
+      </div>
+    </div>
+  </div>
+
   <div class="footnote">
-    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything on Tidal at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
+    Assumptions baked in: your Claude API key, Tidal/Spotify/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's/Spotify's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal or Spotify matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access). Your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there; Spotify's access token is refreshed silently in the background using a refresh token, so it shouldn't need manual reconnects under normal use.
   </div>
 
 </div>
@@ -530,6 +559,15 @@ const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
 const TIDAL_API_BASE = 'https://openapi.tidal.com/v2';
 const TIDAL_SCOPES = 'playlists.write playlists.read user.read';
 const TIDAL_TOKEN_STORAGE = 'tidal-token';
+
+// Spotify OAuth (Authorization Code + PKCE -- same pattern as Tidal above).
+// Unlike Tidal, Spotify's PKCE flow does issue a refresh_token.
+const SPOTIFY_CLIENT_ID = 'YOUR_SPOTIFY_CLIENT_ID';
+const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
+const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
+const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
+const SPOTIFY_SCOPES = 'playlist-modify-private user-read-private';
+const SPOTIFY_TOKEN_STORAGE = 'spotify-token';
 
 // Plain localStorage, so this runs as a standalone page -- no Claude.ai
 // artifact sandbox involved. Keeps the get/set/delete/list shape the rest
@@ -587,6 +625,8 @@ async function init(){
   }catch(e){}
   await handleTidalCallback();
   await renderTidalStatus();
+  await handleSpotifyCallback();
+  await renderSpotifyStatus();
   await handleDiscogsCallback();
   await renderDiscogsStatus();
   try{
@@ -879,6 +919,250 @@ async function confirmPushToTidal(){
     setStatus($('tidalPushStatus'), `Pushed ${foundIds.length} of ${all.length} tracks to Tidal. <a href="${link}" target="_blank" style="color:var(--teal);">Open playlist</a>`, 'ok');
   }catch(e){
     setStatus($('tidalPushStatus'), e.message || 'Push to Tidal failed.', 'error');
+  }
+}
+
+/* ---------- spotify oauth (Authorization Code + PKCE) ---------- */
+function spotifyRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function fetchSpotifyProfile(token){
+  try{
+    const res = await fetch(`${SPOTIFY_API_BASE}/me`, {
+      headers:{ 'Authorization': `Bearer ${token}` }
+    });
+    if(!res.ok) return null;
+    const data = await safeJson(res);
+    return data?.display_name || null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function connectSpotify(){
+  const verifier = randomPkceString(64);
+  const challenge = base64url(await sha256(verifier));
+  const state = randomPkceString(16);
+  sessionStorage.setItem('spotify_pkce_verifier', verifier);
+  sessionStorage.setItem('spotify_oauth_state', state);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: SPOTIFY_CLIENT_ID,
+    redirect_uri: spotifyRedirectUri(),
+    scope: SPOTIFY_SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state
+  });
+  window.location.href = `${SPOTIFY_AUTH_URL}?${params.toString()}`;
+}
+
+async function disconnectSpotify(){
+  await storage.delete(SPOTIFY_TOKEN_STORAGE);
+  await renderSpotifyStatus();
+}
+
+async function handleSpotifyCallback(){
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  const oauthError = url.searchParams.get('error');
+  if(!code && !oauthError) return;
+
+  window.history.replaceState({}, document.title, spotifyRedirectUri());
+
+  const expectedState = sessionStorage.getItem('spotify_oauth_state');
+  const verifier = sessionStorage.getItem('spotify_pkce_verifier');
+  sessionStorage.removeItem('spotify_oauth_state');
+  sessionStorage.removeItem('spotify_pkce_verifier');
+
+  if(oauthError){
+    $('spotifyStatus').textContent = `Spotify connection failed: ${oauthError}`;
+    return;
+  }
+  if(!verifier || url.searchParams.get('state') !== expectedState){
+    $('spotifyStatus').textContent = 'Spotify connection failed: state mismatch, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(SPOTIFY_TOKEN_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: spotifyRedirectUri(),
+        client_id: SPOTIFY_CLIENT_ID,
+        code_verifier: verifier
+      })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.error_description || data.error || 'Token exchange failed.');
+    const expiresAt = Date.now() + (data.expires_in * 1000);
+    const displayName = await fetchSpotifyProfile(data.access_token);
+    await storage.set(SPOTIFY_TOKEN_STORAGE, JSON.stringify({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || null,
+      expires_at: expiresAt,
+      displayName
+    }));
+  }catch(e){
+    $('spotifyStatus').textContent = `Spotify connection failed: ${e.message}`;
+  }
+}
+
+async function refreshSpotifyToken(session){
+  if(!session.refresh_token) return null;
+  try{
+    const res = await fetch(SPOTIFY_TOKEN_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: session.refresh_token,
+        client_id: SPOTIFY_CLIENT_ID
+      })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) return null;
+    const updated = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || session.refresh_token,
+      expires_at: Date.now() + (data.expires_in * 1000),
+      displayName: session.displayName
+    };
+    await storage.set(SPOTIFY_TOKEN_STORAGE, JSON.stringify(updated));
+    return updated;
+  }catch(e){
+    return null;
+  }
+}
+
+async function getSpotifySession(){
+  const rec = await storage.get(SPOTIFY_TOKEN_STORAGE);
+  if(!rec || !rec.value) return null;
+  const parsed = JSON.parse(rec.value);
+  if(!parsed.access_token) return null;
+  if(Date.now() > parsed.expires_at - 60000){
+    return await refreshSpotifyToken(parsed);
+  }
+  return parsed;
+}
+async function getSpotifyToken(){
+  const session = await getSpotifySession();
+  return session ? session.access_token : null;
+}
+
+async function renderSpotifyStatus(){
+  const session = await getSpotifySession();
+  if(session){
+    $('btnSpotifyConnect').classList.add('hidden');
+    $('btnSpotifyDisconnect').classList.remove('hidden');
+    let displayName = session.displayName;
+    if(!displayName){
+      displayName = await fetchSpotifyProfile(session.access_token);
+      if(displayName) await storage.set(SPOTIFY_TOKEN_STORAGE, JSON.stringify({...session, displayName}));
+    }
+    $('spotifyStatus').textContent = displayName ? `Connected as ${displayName}.` : 'Connected.';
+  } else {
+    $('btnSpotifyConnect').classList.remove('hidden');
+    $('btnSpotifyDisconnect').classList.add('hidden');
+  }
+}
+
+/* ---------- push to spotify ---------- */
+async function pushToSpotify(){
+  if(!state.playlist) return;
+  const token = await getSpotifyToken();
+  if(!token){
+    setStatus($('spotifyPushStatus'), 'Connect Spotify above first.', 'error');
+    return;
+  }
+  openSpotifyModal();
+}
+
+function openSpotifyModal(){
+  $('spotifyModalError').classList.add('hidden');
+  $('spotifyModalInput').value = new Date().toLocaleString();
+  $('spotifyModalOverlay').classList.remove('hidden');
+  $('spotifyModalInput').focus();
+  $('spotifyModalInput').select();
+}
+function closeSpotifyModal(){
+  $('spotifyModalOverlay').classList.add('hidden');
+}
+
+async function spotifySearchTrackUri(token, artist, title){
+  const q = encodeURIComponent(`artist:${artist} track:${title}`);
+  try{
+    const res = await fetch(`${SPOTIFY_API_BASE}/search?q=${q}&type=track&limit=1`, {
+      headers:{ 'Authorization': `Bearer ${token}` }
+    });
+    if(!res.ok) return null;
+    const data = await safeJson(res);
+    const first = data?.tracks?.items?.[0];
+    return first ? first.uri : null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function confirmPushToSpotify(){
+  const name = $('spotifyModalInput').value.trim();
+  if(!name) return;
+  const token = await getSpotifyToken();
+  if(!token){
+    $('spotifyModalError').textContent = 'Not connected to Spotify — reconnect and try again.';
+    $('spotifyModalError').classList.remove('hidden');
+    return;
+  }
+
+  closeSpotifyModal();
+  const all = [...state.playlist.sideA, ...state.playlist.sideB];
+  const foundUris = [];
+
+  for(let i=0;i<all.length;i++){
+    setStatus($('spotifyPushStatus'), spinnerLine(`Searching Spotify (${i+1}/${all.length})…`));
+    const uri = await spotifySearchTrackUri(token, all[i].artist, all[i].title);
+    if(uri) foundUris.push(uri);
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  if(!foundUris.length){
+    setStatus($('spotifyPushStatus'), 'No tracks matched on Spotify — nothing to push.', 'error');
+    return;
+  }
+
+  try{
+    setStatus($('spotifyPushStatus'), spinnerLine('Creating Spotify playlist…'));
+    const createRes = await fetch(`${SPOTIFY_API_BASE}/me/playlists`, {
+      method: 'POST',
+      headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, public: false })
+    });
+    const createData = await safeJson(createRes);
+    if(!createRes.ok) throw new Error(createData?.error?.message || 'Could not create the Spotify playlist.');
+    const playlistId = createData.id;
+
+    setStatus($('spotifyPushStatus'), spinnerLine('Adding tracks…'));
+    for(let i=0;i<foundUris.length;i+=100){
+      const chunk = foundUris.slice(i, i+100);
+      const addRes = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+        method: 'POST',
+        headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uris: chunk })
+      });
+      if(!addRes.ok){
+        const addData = await safeJson(addRes).catch(()=>({}));
+        throw new Error(addData?.error?.message || 'Playlist created, but adding tracks failed.');
+      }
+    }
+
+    const link = createData.external_urls?.spotify || `https://open.spotify.com/playlist/${playlistId}`;
+    setStatus($('spotifyPushStatus'), `Pushed ${foundUris.length} of ${all.length} tracks to Spotify. <a href="${link}" target="_blank" style="color:var(--teal);">Open playlist</a>`, 'ok');
+  }catch(e){
+    setStatus($('spotifyPushStatus'), e.message || 'Push to Spotify failed.', 'error');
   }
 }
 
@@ -1364,6 +1648,10 @@ function tidalLink(t){
   return `https://tidal.com/search?q=${encodeURIComponent(t.artist + ' ' + t.title)}`;
 }
 
+function spotifyLink(t){
+  return `https://open.spotify.com/search/${encodeURIComponent(t.artist + ' ' + t.title)}`;
+}
+
 function renderSide(elId, headerText, numLabel, tracks){
   const el = $(elId);
   if(!tracks.length){ el.innerHTML=''; return; }
@@ -1376,6 +1664,7 @@ function renderSide(elId, headerText, numLabel, tracks){
         ${t.note ? `<div class="track-note">${escapeHtml(t.note)}</div>` : ''}
         <div class="track-links">
           <a href="${tidalLink(t)}" target="_blank">Tidal search</a>
+          <a href="${spotifyLink(t)}" target="_blank">Spotify search</a>
           <a class="discogs" href="${t.resourceUrl}" target="_blank">Discogs</a>
         </div>
       </div>
@@ -1542,6 +1831,8 @@ $('btnSaveBpmKey').addEventListener('click', saveBpmKey);
 $('btnClearBpmKey').addEventListener('click', clearBpmKey);
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
+$('btnSpotifyConnect').addEventListener('click', connectSpotify);
+$('btnSpotifyDisconnect').addEventListener('click', disconnectSpotify);
 $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
 $('btnDiscogsDisconnect').addEventListener('click', disconnectDiscogs);
 $('btnDiscogsRefresh').addEventListener('click', fetchDiscogsCollection);
@@ -1551,6 +1842,7 @@ $('btnRegenerate').addEventListener('click', generatePlaylist);
 $('btnCopy').addEventListener('click', copyTracklist);
 $('btnSave').addEventListener('click', savePlaylist);
 $('btnPushTidal').addEventListener('click', pushToTidal);
+$('btnPushSpotify').addEventListener('click', pushToSpotify);
 $('copyModalClose').addEventListener('click', closeCopyModal);
 $('saveModalCancel').addEventListener('click', closeSaveModal);
 $('saveModalConfirm').addEventListener('click', confirmSavePlaylist);
@@ -1563,6 +1855,12 @@ $('tidalModalConfirm').addEventListener('click', confirmPushToTidal);
 $('tidalModalInput').addEventListener('keydown', e=>{
   if(e.key === 'Enter') confirmPushToTidal();
   if(e.key === 'Escape') closeTidalModal();
+});
+$('spotifyModalCancel').addEventListener('click', closeSpotifyModal);
+$('spotifyModalConfirm').addEventListener('click', confirmPushToSpotify);
+$('spotifyModalInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') confirmPushToSpotify();
+  if(e.key === 'Escape') closeSpotifyModal();
 });
 ['yearMin','yearMax','bpmMin','bpmMax'].forEach(id => $(id).addEventListener('input', applyFilters));
 [...$('durToggle').children].forEach(b => b.addEventListener('click', ()=> setDurMode(b.dataset.mode)));
