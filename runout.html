@@ -564,21 +564,9 @@ function tidalRedirectUri(){
   return window.location.origin + window.location.pathname;
 }
 
-function decodeJwtPayload(token){
-  try{
-    const payload = token.split('.')[1];
-    const padded = payload.replace(/-/g,'+').replace(/_/g,'/').padEnd(payload.length + (4 - payload.length % 4) % 4, '=');
-    return JSON.parse(atob(padded));
-  }catch(e){
-    return null;
-  }
-}
-
 async function fetchTidalUsername(token){
-  const claims = decodeJwtPayload(token);
-  if(!claims || !claims.uid) return null;
   try{
-    const res = await fetch(`${TIDAL_API_BASE}/users/${claims.uid}`, {
+    const res = await fetch(`${TIDAL_API_BASE}/users/me`, {
       headers:{ 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.api+json' }
     });
     if(!res.ok) return null;
