@@ -1536,6 +1536,9 @@ wireFileLoader();
 });
 $('btnSaveDemoPassword').addEventListener('click', saveDemoPassword);
 $('btnClearDemoPassword').addEventListener('click', clearDemoPassword);
+$('demoPasswordInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') saveDemoPassword();
+});
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
 $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
