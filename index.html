@@ -1174,7 +1174,7 @@ async function confirmPushToSpotify(){
     setStatus($('spotifyPushStatus'), spinnerLine('Adding tracks…'));
     for(let i=0;i<foundUris.length;i+=100){
       const chunk = foundUris.slice(i, i+100);
-      const addRes = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+      const addRes = await fetch(`${SPOTIFY_API_BASE}/playlists/${playlistId}/items`, {
         method: 'POST',
         headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ uris: chunk })
