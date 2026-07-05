@@ -1095,19 +1095,39 @@ async function fetchDiscogsCollection(){
 
     const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
     const bpmKey = bpmKeyRec && bpmKeyRec.value;
-    let bpmFound = 0;
+    let bpmFound = 0, bpmReused = 0;
     if(bpmKey){
-      for(let i=0;i<releases.length;i++){
-        setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM (${i+1}/${releases.length})…`));
-        const bpm = await getSongBpmLookup(bpmKey, releases[i].artist, releases[i].title);
-        if(bpm){ releases[i].bpm = bpm; bpmFound++; }
+      // Reuse BPM values already found in a previous sync (keyed by Discogs
+      // release id) instead of re-looking-up the whole collection every
+      // time -- only genuinely new releases need a fresh lookup.
+      const prevBpmById = new Map();
+      try{
+        const prevRec = await storage.get(STORAGE_COLLECTION, false);
+        if(prevRec && prevRec.value){
+          const prev = JSON.parse(prevRec.value);
+          for(const r of (prev.releases || [])){
+            if(r.bpm) prevBpmById.set(r.id, r.bpm);
+          }
+        }
+      }catch(e){}
+
+      const toLookup = [];
+      for(const r of releases){
+        if(prevBpmById.has(r.id)){ r.bpm = prevBpmById.get(r.id); bpmReused++; }
+        else toLookup.push(r);
+      }
+
+      for(let i=0;i<toLookup.length;i++){
+        setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM for new releases (${i+1}/${toLookup.length})…`));
+        const bpm = await getSongBpmLookup(bpmKey, toLookup[i].artist, toLookup[i].title);
+        if(bpm){ toLookup[i].bpm = bpm; bpmFound++; }
         await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
       }
     }
 
     applyCollection(releases, username, Date.now());
     setStatus($('discogsFetchStatus'), bpmKey
-      ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound}.`
+      ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound + bpmReused} (${bpmReused} reused, ${bpmFound} new).`
       : `Loaded ${releases.length} releases from Discogs.`, 'ok');
   }catch(e){
     setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
