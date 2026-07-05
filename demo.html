@@ -109,6 +109,8 @@ input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(-
 .field-fixed{flex:0 0 auto;min-width:0;width:140px;}
 .hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
 .hint a{color:var(--teal);}
+.hint.ok{color:var(--teal);}
+.hint.error{color:var(--red);}
 
 button{
   font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
@@ -609,16 +611,20 @@ async function forgetAccount(){
 
 /* ---------- demo password ---------- */
 async function verifyDemoPassword(password){
-  $('demoPasswordHint').textContent = 'Checking…';
+  const hint = $('demoPasswordHint');
+  hint.className = 'hint';
+  hint.textContent = 'Checking…';
   try{
     const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/verify`, {
       method: 'POST',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ password })
     });
-    $('demoPasswordHint').textContent = res.ok ? 'Password confirmed.' : 'Wrong password — try again.';
+    hint.className = 'hint ' + (res.ok ? 'ok' : 'error');
+    hint.textContent = res.ok ? '✓ Password confirmed.' : '✗ Wrong password — try again.';
   }catch(e){
-    $('demoPasswordHint').textContent = 'Could not reach the demo server to check the password.';
+    hint.className = 'hint error';
+    hint.textContent = '✗ Could not reach the demo server to check the password.';
   }
 }
 
@@ -632,6 +638,7 @@ async function saveDemoPassword(){
 async function clearDemoPassword(){
   await storage.delete(DEMO_PASSWORD_STORAGE);
   $('demoPasswordInput').value = '';
+  $('demoPasswordHint').className = 'hint';
   $('demoPasswordHint').textContent = 'Password cleared.';
 }
 
