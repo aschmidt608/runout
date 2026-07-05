@@ -347,7 +347,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     <div class="stat-strip hidden" id="collectionStats"></div>
 
     <div class="hidden" id="bpmEnrichSection" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-      <div class="panel-sub" style="margin:0 0 8px 0;">Optional and slow (roughly 600ms per release, so several minutes for a large collection) — coverage varies a lot by collection and can be well under 50%, so most releases will likely still fall back to the genre/style/year hint either way. Already-matched releases are cached and skipped on future runs, so this cost is mostly one-time. On mobile, this keeps your screen from auto-locking while it runs, but switching to another app still pauses it — that's a phone/browser battery-saving restriction no website can override, so keep this tab in front until it finishes.</div>
+      <div class="panel-sub" style="margin:0 0 8px 0;">Optional and slow (roughly 600ms–2s per release, so several minutes for a large collection) — tries the demo proxy's GetSongBPM lookup first, then falls back to a free MusicBrainz → AcousticBrainz lookup for anything it misses. Coverage still varies a lot by collection and can be well under 50% either way, so most releases will likely still fall back to the genre/style/year hint. Already-matched releases are cached and skipped on future runs, so this cost is mostly one-time. On mobile, this keeps your screen from auto-locking while it runs, but switching to another app still pauses it — that's a phone/browser battery-saving restriction no website can override, so keep this tab in front until it finishes.</div>
       <div class="row-actions">
         <button class="small" id="btnEnrichBpm">Look up BPM</button>
         <span class="hint" id="bpmEnrichStatus" style="margin:0;"></span>
@@ -545,6 +545,14 @@ const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
 // than a per-user key like the regular index.html uses.
 const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
 
+// Free fallback when GetSongBPM misses: resolve artist/title to a
+// MusicBrainz recording, then look up tempo in AcousticBrainz's archived
+// analysis by that recording's MBID. Both are free, unauthenticated,
+// CORS-open APIs -- called directly from the browser, no Worker needed.
+const MUSICBRAINZ_SEARCH_URL = 'https://musicbrainz.org/ws/2/recording/';
+const ACOUSTICBRAINZ_LOWLEVEL_URL = 'https://acousticbrainz.org/api/v1';
+const MUSICBRAINZ_REQUEST_DELAY = 1100; // ms -- MusicBrainz enforces ~1 req/sec per IP
+
 // Guards against overlapping fetchDiscogsCollection() runs -- e.g. clicking
 // Refresh while a fetch is still in flight -- which would double up
 // requests and blow past Discogs' rate limit.
@@ -708,6 +716,34 @@ async function getSongBpmLookup(demoPassword, artist, title){
     if(!res.ok) return null;
     const data = await res.json();
     return data.bpm || null;
+  }catch(e){
+    return null;
+  }
+}
+
+// Free, keyless fallback: resolve artist/title to a MusicBrainz recording,
+// then look up tempo in AcousticBrainz's archive by that MBID. Always
+// paces the trailing delay (even on early misses) so consecutive calls
+// from this function never exceed MusicBrainz's ~1 req/sec limit.
+async function lookupBpmViaAcousticBrainz(artist, title){
+  try{
+    const query = `artist:"${artist}" AND recording:"${title}"`;
+    const searchUrl = `${MUSICBRAINZ_SEARCH_URL}?query=${encodeURIComponent(query)}&fmt=json&limit=1`;
+    const searchRes = await fetch(searchUrl);
+    if(!searchRes.ok){
+      await new Promise(r => setTimeout(r, MUSICBRAINZ_REQUEST_DELAY));
+      return null;
+    }
+    const searchData = await searchRes.json();
+    const top = searchData.recordings?.[0];
+    await new Promise(r => setTimeout(r, MUSICBRAINZ_REQUEST_DELAY));
+    if(!top || top.score < 90) return null;
+
+    const abRes = await fetch(`${ACOUSTICBRAINZ_LOWLEVEL_URL}/${top.id}/low-level`);
+    if(!abRes.ok) return null; // 404 = not in the pre-2022 archive
+    const abData = await abRes.json();
+    const bpm = Math.round(parseFloat(abData?.rhythm?.bpm));
+    return Number.isFinite(bpm) ? bpm : null;
   }catch(e){
     return null;
   }
@@ -1197,13 +1233,19 @@ async function enrichBpm(){
       return;
     }
 
-    let bpmFound = 0;
+    let bpmFoundGetSongBpm = 0, bpmFoundAcousticBrainz = 0;
     for(let i=0;i<toLookup.length;i++){
       setStatus($('bpmEnrichStatus'), spinnerLine(`Looking up BPM (${i+1}/${toLookup.length})… keep this tab open and your screen on`));
-      const bpm = await getSongBpmLookup(demoPassword, toLookup[i].artist, toLookup[i].title);
-      if(bpm){ toLookup[i].bpm = bpm; bpmFound++; }
+      let bpm = await getSongBpmLookup(demoPassword, toLookup[i].artist, toLookup[i].title);
       await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
+      if(bpm) bpmFoundGetSongBpm++;
+      if(!bpm){
+        bpm = await lookupBpmViaAcousticBrainz(toLookup[i].artist, toLookup[i].title);
+        if(bpm) bpmFoundAcousticBrainz++;
+      }
+      if(bpm) toLookup[i].bpm = bpm;
     }
+    const bpmFound = bpmFoundGetSongBpm + bpmFoundAcousticBrainz;
 
     const rec = await storage.get(STORAGE_COLLECTION, false);
     const prev = rec && rec.value ? JSON.parse(rec.value) : {};
@@ -1211,7 +1253,7 @@ async function enrichBpm(){
     await storage.set(STORAGE_COLLECTION, JSON.stringify({...prev, releases: state.collection, syncedAt}), false);
     renderCollectionStats(syncedAt);
     applyFilters();
-    setStatus($('bpmEnrichStatus'), `Matched BPM for ${bpmFound} of ${toLookup.length} looked up.`, 'ok');
+    setStatus($('bpmEnrichStatus'), `Matched BPM for ${bpmFound} of ${toLookup.length} looked up (${bpmFoundGetSongBpm} via GetSongBPM, ${bpmFoundAcousticBrainz} via MusicBrainz/AcousticBrainz).`, 'ok');
   }catch(e){
     setStatus($('bpmEnrichStatus'), e.message || 'BPM lookup failed.', 'error');
   }finally{
