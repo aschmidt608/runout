@@ -347,7 +347,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     <div class="stat-strip hidden" id="collectionStats"></div>
 
     <div class="hidden" id="bpmEnrichSection" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-      <div class="panel-sub" style="margin:0 0 8px 0;">Optional and slow (roughly 600ms per release, so several minutes for a large collection) — coverage varies a lot by collection and can be well under 50%, so most releases will likely still fall back to the genre/style/year hint either way. Already-matched releases are cached and skipped on future runs, so this cost is mostly one-time.</div>
+      <div class="panel-sub" style="margin:0 0 8px 0;">Optional and slow (roughly 600ms per release, so several minutes for a large collection) — coverage varies a lot by collection and can be well under 50%, so most releases will likely still fall back to the genre/style/year hint either way. Already-matched releases are cached and skipped on future runs, so this cost is mostly one-time. On mobile, this keeps your screen from auto-locking while it runs, but switching to another app still pauses it — that's a phone/browser battery-saving restriction no website can override, so keep this tab in front until it finishes.</div>
       <div class="row-actions">
         <button class="small" id="btnEnrichBpm">Look up BPM</button>
         <span class="hint" id="bpmEnrichStatus" style="margin:0;"></span>
@@ -552,6 +552,27 @@ let discogsFetchInFlight = false;
 
 // Guards against overlapping enrichBpm() runs, same reasoning.
 let bpmEnrichInFlight = false;
+
+// Keeps the screen from auto-locking during a long BPM run -- doesn't
+// prevent throttling if the browser app itself is backgrounded (switched
+// away from), which no client-side API can override; only helps with the
+// screen-timeout case.
+let wakeLockSentinel = null;
+async function requestWakeLock(){
+  if(!('wakeLock' in navigator)) return;
+  try{ wakeLockSentinel = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+async function releaseWakeLock(){
+  if(wakeLockSentinel){
+    try{ await wakeLockSentinel.release(); }catch(e){}
+    wakeLockSentinel = null;
+  }
+}
+document.addEventListener('visibilitychange', async ()=>{
+  if(wakeLockSentinel !== null && document.visibilityState === 'visible' && bpmEnrichInFlight){
+    await requestWakeLock();
+  }
+});
 
 // Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
 // stays a static page). Client ID is a public identifier by design, same as
@@ -1168,6 +1189,7 @@ async function enrichBpm(){
 
   bpmEnrichInFlight = true;
   $('btnEnrichBpm').disabled = true;
+  await requestWakeLock();
   try{
     const toLookup = state.collection.filter(r => !r.bpm);
     if(!toLookup.length){
@@ -1177,7 +1199,7 @@ async function enrichBpm(){
 
     let bpmFound = 0;
     for(let i=0;i<toLookup.length;i++){
-      setStatus($('bpmEnrichStatus'), spinnerLine(`Looking up BPM (${i+1}/${toLookup.length})…`));
+      setStatus($('bpmEnrichStatus'), spinnerLine(`Looking up BPM (${i+1}/${toLookup.length})… keep this tab open and your screen on`));
       const bpm = await getSongBpmLookup(demoPassword, toLookup[i].artist, toLookup[i].title);
       if(bpm){ toLookup[i].bpm = bpm; bpmFound++; }
       await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
@@ -1195,6 +1217,7 @@ async function enrichBpm(){
   }finally{
     bpmEnrichInFlight = false;
     $('btnEnrichBpm').disabled = false;
+    await releaseWakeLock();
   }
 }
 
