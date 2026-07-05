@@ -315,14 +315,6 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     <div class="source-pane" id="paneConnect">
       <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed.</div>
 
-      <label>GetSongBPM API key <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional — get a free one at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">getsongbpm.com/api</a>, coverage will be partial)</span></label>
-      <input type="password" id="bpmKeyInput" placeholder="Paste your GetSongBPM API key">
-      <div class="row-actions" style="margin-top:8px;margin-bottom:16px;">
-        <button class="ghost small" id="btnSaveBpmKey">Save key</button>
-        <button class="ghost small" id="btnClearBpmKey">Clear key</button>
-        <span class="hint" id="bpmKeyHint" style="margin:0;"></span>
-      </div>
-
       <div class="row-actions">
         <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
         <button class="ghost small hidden" id="btnDiscogsDisconnect">Disconnect</button>
@@ -355,6 +347,21 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
     </div>
 
     <div class="stat-strip hidden" id="collectionStats"></div>
+
+    <div class="hidden" id="bpmEnrichSection" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <label>GetSongBPM API key <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional — get a free one at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">getsongbpm.com/api</a>)</span></label>
+      <input type="password" id="bpmKeyInput" placeholder="Paste your GetSongBPM API key">
+      <div class="row-actions" style="margin-top:8px;">
+        <button class="ghost small" id="btnSaveBpmKey">Save key</button>
+        <button class="ghost small" id="btnClearBpmKey">Clear key</button>
+        <span class="hint" id="bpmKeyHint" style="margin:0;"></span>
+      </div>
+      <div class="panel-sub" style="margin:14px 0 8px 0;">Optional and slow (roughly 600ms per release, so several minutes for a large collection) — coverage varies a lot by collection and can be well under 50%, so most releases will likely still fall back to the genre/style/year hint either way. Already-matched releases are cached and skipped on future runs, so this cost is mostly one-time.</div>
+      <div class="row-actions">
+        <button class="small" id="btnEnrichBpm">Look up BPM</button>
+        <span class="hint" id="bpmEnrichStatus" style="margin:0;"></span>
+      </div>
+    </div>
   </div>
 
   <!-- STEP 2: FILTERS -->
@@ -501,7 +508,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
   </div>
 
   <div class="footnote">
-    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
+    Assumptions baked in: your Claude API key, Tidal/Discogs sessions, and collection all live only in this browser's local storage — nothing is sent anywhere except directly from your device to Anthropic's/Tidal's APIs, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, opt-in "Look up BPM" step for tempo data (a separate button, not automatic — it's slow and often well under 50% coverage, weakest for obscure or vinyl-only pressings) — the BPM range filter only excludes releases with a known BPM outside it, and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
   </div>
 
 </div>
@@ -544,9 +551,12 @@ const GETSONGBPM_SEARCH_URL = 'https://api.getsong.co/search/';
 const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
 
 // Guards against overlapping fetchDiscogsCollection() runs -- e.g. clicking
-// Refresh while a fetch (or its BPM lookups) is still in flight -- which
-// would double up requests and blow past Discogs' rate limit.
+// Refresh while a fetch is still in flight -- which would double up
+// requests and blow past Discogs' rate limit.
 let discogsFetchInFlight = false;
+
+// Guards against overlapping enrichBpm() runs, same reasoning.
+let bpmEnrichInFlight = false;
 
 // Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
 // stays a static page). Client ID is a public identifier by design, same as
@@ -627,6 +637,7 @@ async function init(){
         renderCollectionStats(parsed.syncedAt);
         renderFilters();
         $('panelFilters').classList.remove('hidden');
+        $('bpmEnrichSection').classList.remove('hidden');
         $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded ${new Date(parsed.syncedAt).toLocaleDateString()}`;
       }
     }
@@ -640,6 +651,7 @@ async function forgetAccount(){
   $('panelFilters').classList.add('hidden');
   $('panelResults').classList.add('hidden');
   $('collectionStats').classList.add('hidden');
+  $('bpmEnrichSection').classList.add('hidden');
   $('mastMeta').innerHTML='';
   setStatus($('connectStatus'), 'Collection cleared.', 'ok');
 }
@@ -1114,47 +1126,81 @@ async function fetchDiscogsCollection(){
       return;
     }
 
-    const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
-    const bpmKey = bpmKeyRec && bpmKeyRec.value;
-    let bpmFound = 0, bpmReused = 0;
-    if(bpmKey){
-      // Reuse BPM values already found in a previous sync (keyed by Discogs
-      // release id) instead of re-looking-up the whole collection every
-      // time -- only genuinely new releases need a fresh lookup.
-      const prevBpmById = new Map();
-      try{
-        const prevRec = await storage.get(STORAGE_COLLECTION, false);
-        if(prevRec && prevRec.value){
-          const prev = JSON.parse(prevRec.value);
-          for(const r of (prev.releases || [])){
-            if(r.bpm) prevBpmById.set(r.id, r.bpm);
-          }
+    // Carry forward BPM values already found in a previous sync (keyed by
+    // Discogs release id) so a refresh never throws away past lookups --
+    // BPM enrichment itself is a separate, opt-in step (see enrichBpm()).
+    let bpmCarried = 0;
+    try{
+      const prevRec = await storage.get(STORAGE_COLLECTION, false);
+      if(prevRec && prevRec.value){
+        const prev = JSON.parse(prevRec.value);
+        const prevBpmById = new Map();
+        for(const r of (prev.releases || [])){
+          if(r.bpm) prevBpmById.set(r.id, r.bpm);
         }
-      }catch(e){}
-
-      const toLookup = [];
-      for(const r of releases){
-        if(prevBpmById.has(r.id)){ r.bpm = prevBpmById.get(r.id); bpmReused++; }
-        else toLookup.push(r);
+        for(const r of releases){
+          if(prevBpmById.has(r.id)){ r.bpm = prevBpmById.get(r.id); bpmCarried++; }
+        }
       }
-
-      for(let i=0;i<toLookup.length;i++){
-        setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM for new releases (${i+1}/${toLookup.length})…`));
-        const bpm = await getSongBpmLookup(bpmKey, toLookup[i].artist, toLookup[i].title);
-        if(bpm){ toLookup[i].bpm = bpm; bpmFound++; }
-        await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
-      }
-    }
+    }catch(e){}
 
     applyCollection(releases, username, Date.now());
-    setStatus($('discogsFetchStatus'), bpmKey
-      ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound + bpmReused} (${bpmReused} reused, ${bpmFound} new).`
+    setStatus($('discogsFetchStatus'), bpmCarried
+      ? `Loaded ${releases.length} releases from Discogs (${bpmCarried} already had BPM from a previous lookup).`
       : `Loaded ${releases.length} releases from Discogs.`, 'ok');
   }catch(e){
     setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
   }finally{
     discogsFetchInFlight = false;
     $('btnDiscogsRefresh').disabled = false;
+  }
+}
+
+async function enrichBpm(){
+  if(bpmEnrichInFlight){
+    setStatus($('bpmEnrichStatus'), 'Already looking up BPM — hang tight.', 'error');
+    return;
+  }
+  const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
+  const bpmKey = bpmKeyRec && bpmKeyRec.value;
+  if(!bpmKey){
+    setStatus($('bpmEnrichStatus'), 'Add a GetSongBPM key above first.', 'error');
+    return;
+  }
+  if(!state.collection.length){
+    setStatus($('bpmEnrichStatus'), 'Load a collection first.', 'error');
+    return;
+  }
+
+  bpmEnrichInFlight = true;
+  $('btnEnrichBpm').disabled = true;
+  try{
+    const toLookup = state.collection.filter(r => !r.bpm);
+    if(!toLookup.length){
+      setStatus($('bpmEnrichStatus'), 'Every release already has a known BPM (or was already looked up).', 'ok');
+      return;
+    }
+
+    let bpmFound = 0;
+    for(let i=0;i<toLookup.length;i++){
+      setStatus($('bpmEnrichStatus'), spinnerLine(`Looking up BPM (${i+1}/${toLookup.length})…`));
+      const bpm = await getSongBpmLookup(bpmKey, toLookup[i].artist, toLookup[i].title);
+      if(bpm){ toLookup[i].bpm = bpm; bpmFound++; }
+      await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
+    }
+
+    const rec = await storage.get(STORAGE_COLLECTION, false);
+    const prev = rec && rec.value ? JSON.parse(rec.value) : {};
+    const syncedAt = prev.syncedAt || Date.now();
+    await storage.set(STORAGE_COLLECTION, JSON.stringify({...prev, releases: state.collection, syncedAt}), false);
+    renderCollectionStats(syncedAt);
+    applyFilters();
+    setStatus($('bpmEnrichStatus'), `Matched BPM for ${bpmFound} of ${toLookup.length} looked up.`, 'ok');
+  }catch(e){
+    setStatus($('bpmEnrichStatus'), e.message || 'BPM lookup failed.', 'error');
+  }finally{
+    bpmEnrichInFlight = false;
+    $('btnEnrichBpm').disabled = false;
   }
 }
 
@@ -1168,6 +1214,7 @@ function applyCollection(releases, username, syncedAt){
   renderCollectionStats(syncedAt);
   renderFilters();
   $('panelFilters').classList.remove('hidden');
+  $('bpmEnrichSection').classList.remove('hidden');
   $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded just now`;
 }
 
@@ -1621,6 +1668,7 @@ $('btnSaveApiKey').addEventListener('click', saveApiKey);
 $('btnClearApiKey').addEventListener('click', clearApiKey);
 $('btnSaveBpmKey').addEventListener('click', saveBpmKey);
 $('btnClearBpmKey').addEventListener('click', clearBpmKey);
+$('btnEnrichBpm').addEventListener('click', enrichBpm);
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
 $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
