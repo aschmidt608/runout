@@ -786,10 +786,13 @@ async function renderTidalStatus(){
       username = await fetchTidalUsername(session.access_token);
       if(username) await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({...session, username}));
     }
-    $('tidalStatus').textContent = username ? `Connected as ${username}.` : 'Connected.';
+    $('tidalStatus').className = 'hint ok';
+    $('tidalStatus').textContent = username ? `✓ Connected as ${username}.` : '✓ Connected.';
   } else {
     $('btnTidalConnect').classList.remove('hidden');
     $('btnTidalDisconnect').classList.add('hidden');
+    $('tidalStatus').className = 'hint';
+    $('tidalStatus').textContent = '';
   }
 }
 
