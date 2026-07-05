@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runout — Usage dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#16140F;
+  --bg-panel:#1D1A13;
+  --border:#35301F;
+  --border-bright:#4A4326;
+  --text:#F1EAD9;
+  --text-dim:#9A9483;
+  --text-faint:#6B6656;
+  --amber:#E8A33D;
+  --amber-dim:#8A6524;
+  --teal:#3FA9A3;
+  --red:#C1524B;
+  --radius:3px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--text);font-family:'Work Sans',sans-serif;
+  min-height:100vh;line-height:1.5;
+}
+::selection{background:var(--amber);color:var(--bg);}
+.wrap{max-width:900px;margin:0 auto;padding:28px 20px 80px;}
+
+.masthead{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  border-bottom:2px solid var(--border-bright);
+  padding-bottom:18px;margin-bottom:28px;flex-wrap:wrap;gap:10px;
+}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;
+}
+.wordmark{
+  font-family:'Oswald',sans-serif;font-weight:700;font-size:38px;
+  letter-spacing:.02em;text-transform:uppercase;color:var(--text);
+}
+.wordmark .accent{color:var(--amber);}
+
+.panel{
+  background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:var(--radius);padding:22px;margin-bottom:18px;
+}
+.panel-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.panel-num{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);
+  border:1px solid var(--amber-dim);border-radius:2px;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.panel-title{
+  font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.06em;
+  text-transform:uppercase;font-weight:600;
+}
+.panel-sub{font-size:13px;color:var(--text-dim);margin:-8px 0 16px 32px;}
+
+label{
+  display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;
+}
+input[type=password]{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:2px;color:var(--text);padding:10px 12px;
+  font-family:'Work Sans',sans-serif;font-size:14px;
+}
+input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+
+button{
+  font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;font-size:13px;
+  background:var(--amber);color:#16140F;border:none;
+  border-radius:2px;padding:11px 20px;cursor:pointer;
+}
+button:hover{background:#f2b357;}
+button.small{padding:7px 12px;font-size:11px;}
+.row-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+
+.hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
+.hint.ok{color:var(--teal);}
+.hint.error{color:var(--red);}
+
+.stat-strip{
+  display:flex;gap:22px;flex-wrap:wrap;margin-top:4px;
+  font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);
+}
+.stat-strip b{color:var(--text);font-size:18px;display:block;font-family:'IBM Plex Mono',monospace;}
+.stat-strip.big b{color:var(--amber);font-size:24px;}
+
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px;}
+th,td{
+  text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);
+  font-family:'IBM Plex Mono',monospace;color:var(--text-dim);white-space:nowrap;
+}
+th{color:var(--text-faint);text-transform:uppercase;font-size:10px;letter-spacing:.06em;}
+td.num,th.num{text-align:right;}
+td.cost{color:var(--teal);}
+.table-wrap{overflow-x:auto;}
+.empty-note{font-size:13px;color:var(--text-faint);font-style:italic;margin-top:8px;}
+
+.insight{
+  font-size:13px;color:var(--text-dim);line-height:1.7;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
+  padding:14px 16px;margin-top:12px;
+}
+.insight b{color:var(--amber);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Thierry Ennui — Set Prep Utility</div>
+      <div class="wordmark">USAGE <span class="accent">DASHBOARD</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-num">1</div>
+      <div class="panel-title">Your generations (this browser)</div>
+    </div>
+    <div class="panel-sub">Real token counts from Claude's own API responses, logged locally on every generation from either the regular page or the demo page (they share this browser's storage) — nothing estimated.</div>
+    <div class="stat-strip big" id="localTotals"></div>
+    <div id="localTableWrap"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-num">2</div>
+      <div class="panel-title">Demo usage (all friends)</div>
+    </div>
+    <div class="panel-sub">Aggregate usage across everyone using the friends demo, tracked server-side in the proxy Worker. Needs the demo password to fetch.</div>
+    <input type="password" id="statsPasswordInput" placeholder="Demo password">
+    <div class="row-actions" style="margin-top:12px;">
+      <button class="small" id="btnFetchStats">Fetch demo usage</button>
+      <span class="hint" id="statsHint" style="margin:0;"></span>
+    </div>
+    <div class="stat-strip big" id="demoTotals"></div>
+    <div id="demoTableWrap"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-num">3</div>
+      <div class="panel-title">What's driving cost</div>
+    </div>
+    <div class="panel-sub">Computed from your own logged generations above.</div>
+    <div id="insight"></div>
+  </div>
+
+</div>
+
+<script>
+const USAGE_LOG_STORAGE = 'runout-usage-log';
+const CLAUDE_PROXY_WORKER_URL = 'https://runout-claude-proxy.thierryennuimusic.workers.dev';
+const INPUT_PRICE_PER_MTOK = 3;
+const OUTPUT_PRICE_PER_MTOK = 15;
+
+const $ = id => document.getElementById(id);
+
+function costOf(inputTokens, outputTokens){
+  return (inputTokens / 1e6) * INPUT_PRICE_PER_MTOK + (outputTokens / 1e6) * OUTPUT_PRICE_PER_MTOK;
+}
+function fmtTokens(n){ return n.toLocaleString(); }
+function fmtCost(n){ return `$${n.toFixed(4)}`; }
+function fmtDate(ts){ return new Date(ts).toLocaleString(); }
+
+function renderLocalUsage(){
+  let log = [];
+  try{ log = JSON.parse(localStorage.getItem(USAGE_LOG_STORAGE) || '[]'); }catch(e){}
+
+  const totalIn = log.reduce((s,e)=>s+(e.inputTokens||0), 0);
+  const totalOut = log.reduce((s,e)=>s+(e.outputTokens||0), 0);
+  const totalCost = costOf(totalIn, totalOut);
+
+  $('localTotals').innerHTML = `
+    <div>Generations<b>${log.length}</b></div>
+    <div>Input tokens<b>${fmtTokens(totalIn)}</b></div>
+    <div>Output tokens<b>${fmtTokens(totalOut)}</b></div>
+    <div>Estimated cost<b>${fmtCost(totalCost)}</b></div>
+  `;
+
+  if(!log.length){
+    $('localTableWrap').innerHTML = `<div class="empty-note">No generations logged yet in this browser — generate a playlist on the regular page or the demo page, then come back here.</div>`;
+  } else {
+    const rows = [...log].reverse().slice(0, 50).map(e => `
+      <tr>
+        <td>${fmtDate(e.ts)}</td>
+        <td class="num">${e.poolSize ?? '—'}</td>
+        <td class="num">${e.targetCount ?? '—'}</td>
+        <td class="num">${fmtTokens(e.inputTokens||0)}</td>
+        <td class="num">${fmtTokens(e.outputTokens||0)}</td>
+        <td class="num cost">${fmtCost(costOf(e.inputTokens||0, e.outputTokens||0))}</td>
+      </tr>
+    `).join('');
+    $('localTableWrap').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th class="num">Pool size</th><th class="num">Target tracks</th><th class="num">Input tok</th><th class="num">Output tok</th><th class="num">Cost</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="empty-note">Showing the most recent ${Math.min(50, log.length)} of ${log.length} logged generations.</div>
+    `;
+  }
+
+  renderInsight(log, totalIn, totalOut);
+}
+
+function renderInsight(log, totalIn, totalOut){
+  if(!log.length){
+    $('insight').innerHTML = `<div class="empty-note">Generate a few playlists to see what's actually driving your token cost.</div>`;
+    return;
+  }
+  const withPool = log.filter(e => e.poolSize);
+  const withTracks = log.filter(e => e.targetCount);
+  const avgInputPerRelease = withPool.length
+    ? withPool.reduce((s,e)=>s+e.inputTokens,0) / withPool.reduce((s,e)=>s+e.poolSize,0)
+    : null;
+  const avgOutputPerTrack = withTracks.length
+    ? withTracks.reduce((s,e)=>s+e.outputTokens,0) / withTracks.reduce((s,e)=>s+e.targetCount,0)
+    : null;
+  const avgPoolSize = withPool.length ? withPool.reduce((s,e)=>s+e.poolSize,0)/withPool.length : null;
+
+  $('insight').innerHTML = `
+    <div class="insight">
+      ${avgInputPerRelease ? `Each release in the candidate pool costs about <b>${Math.round(avgInputPerRelease)} input tokens</b> on average — with pools capped at 220 releases, loose filters that keep hitting that ceiling are the single biggest lever on cost. Your average pool size so far is <b>${Math.round(avgPoolSize)}</b> releases.` : ''}
+      ${avgOutputPerTrack ? `<br><br>Each selected track costs about <b>${Math.round(avgOutputPerTrack)} output tokens</b> (the pick + its note) — so a longer requested set costs proportionally more, though it's capped by the 4,000 max_tokens ceiling.` : ''}
+      <br><br>Tightening genre/style/year/BPM filters to shrink the candidate pool below 220 is the most direct way to reduce cost per generation. Repeated "Regenerate" clicks each cost the same as a fresh generation.
+    </div>
+  `;
+}
+
+async function fetchDemoStats(){
+  const password = $('statsPasswordInput').value.trim();
+  if(!password){ $('statsHint').textContent = 'Enter the demo password first.'; $('statsHint').className='hint error'; return; }
+  $('statsHint').className = 'hint';
+  $('statsHint').textContent = 'Fetching…';
+  try{
+    const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/usage-stats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+    if(!res.ok){
+      $('statsHint').className = 'hint error';
+      $('statsHint').textContent = `✗ ${data.error || 'Could not fetch usage stats.'}`;
+      return;
+    }
+    $('statsHint').className = 'hint ok';
+    $('statsHint').textContent = '✓ Fetched.';
+    renderDemoUsage(data.days || []);
+  }catch(e){
+    $('statsHint').className = 'hint error';
+    $('statsHint').textContent = '✗ Could not reach the demo proxy.';
+  }
+}
+
+function renderDemoUsage(days){
+  const totalIn = days.reduce((s,d)=>s+(d.inputTokens||0), 0);
+  const totalOut = days.reduce((s,d)=>s+(d.outputTokens||0), 0);
+  const totalGen = days.reduce((s,d)=>s+(d.generations||0), 0);
+  const totalCost = costOf(totalIn, totalOut);
+
+  $('demoTotals').innerHTML = `
+    <div>Generations<b>${totalGen}</b></div>
+    <div>Input tokens<b>${fmtTokens(totalIn)}</b></div>
+    <div>Output tokens<b>${fmtTokens(totalOut)}</b></div>
+    <div>Estimated cost<b>${fmtCost(totalCost)}</b></div>
+  `;
+
+  if(!days.length){
+    $('demoTableWrap').innerHTML = `<div class="empty-note">No demo usage recorded yet.</div>`;
+    return;
+  }
+  const rows = [...days].reverse().map(d => `
+    <tr>
+      <td>${d.date}</td>
+      <td class="num">${d.generations||0}</td>
+      <td class="num">${fmtTokens(d.inputTokens||0)}</td>
+      <td class="num">${fmtTokens(d.outputTokens||0)}</td>
+      <td class="num cost">${fmtCost(costOf(d.inputTokens||0, d.outputTokens||0))}</td>
+    </tr>
+  `).join('');
+  $('demoTableWrap').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Day</th><th class="num">Generations</th><th class="num">Input tok</th><th class="num">Output tok</th><th class="num">Cost</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+$('btnFetchStats').addEventListener('click', fetchDemoStats);
+$('statsPasswordInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') fetchDemoStats();
+});
+
+renderLocalUsage();
+</script>
+</body>
+</html>

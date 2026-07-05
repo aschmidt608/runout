@@ -11,13 +11,20 @@
  * their own GetSongBPM key either (lower stakes than the Anthropic key --
  * a free lookup service with no billing exposure -- so no daily cap here).
  *
+ * Also tracks real token usage (from Anthropic's own response) per day in
+ * KV, so the account owner can see actual aggregate demo spend on the
+ * usage dashboard (dashboard.html) rather than guessing.
+ *
  * Endpoints:
- *   POST /demo/verify    { password } -> { ok: true } or 401, no Anthropic
- *                        call and no effect on the daily count -- just lets
- *                        the page confirm the password immediately.
- *   POST /demo/generate  { password, model, max_tokens, system, messages }
- *                        -> whatever Anthropic's Messages API returns
- *   POST /demo/bpm       { password, artist, title } -> { bpm: number|null }
+ *   POST /demo/verify       { password } -> { ok: true } or 401, no
+ *                           Anthropic call and no effect on the daily
+ *                           count -- just lets the page confirm the
+ *                           password immediately.
+ *   POST /demo/generate     { password, model, max_tokens, system, messages }
+ *                           -> whatever Anthropic's Messages API returns
+ *   POST /demo/bpm          { password, artist, title } -> { bpm: number|null }
+ *   POST /demo/usage-stats  { password } -> { days: [{date, inputTokens,
+ *                           outputTokens, generations}, ...] }
  */
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
@@ -45,6 +52,17 @@ async function checkAndIncrementDailyCount(kv, limit) {
   if (current >= limit) return false;
   await kv.put(key, String(current + 1), { expirationTtl: 172800 });
   return true;
+}
+
+async function recordUsage(kv, usage) {
+  if (!usage) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `usage:${today}`;
+  const current = JSON.parse((await kv.get(key)) || '{"inputTokens":0,"outputTokens":0,"generations":0}');
+  current.inputTokens += usage.input_tokens || 0;
+  current.outputTokens += usage.output_tokens || 0;
+  current.generations += 1;
+  await kv.put(key, JSON.stringify(current), { expirationTtl: 60 * 60 * 24 * 400 });
 }
 
 export default {
@@ -95,6 +113,10 @@ export default {
           body: JSON.stringify({ model, max_tokens, system, messages })
         });
         const text = await res.text();
+        try {
+          const parsed = JSON.parse(text);
+          await recordUsage(env.RUNOUT_DEMO_KV, parsed.usage);
+        } catch (e) {}
         return new Response(text, {
           status: res.status,
           headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
@@ -124,6 +146,28 @@ export default {
         return json({ bpm: Number.isFinite(bpm) ? bpm : null }, 200, origin);
       } catch (e) {
         return json({ bpm: null }, 200, origin);
+      }
+    }
+
+    if (url.pathname === '/demo/usage-stats' && request.method === 'POST') {
+      try {
+        const { password } = await request.json();
+        if (!password || password !== env.DEMO_PASSWORD) {
+          return json({ error: 'Wrong password.' }, 401, origin);
+        }
+
+        const list = await env.RUNOUT_DEMO_KV.list({ prefix: 'usage:' });
+        const days = [];
+        for (const k of list.keys) {
+          const val = await env.RUNOUT_DEMO_KV.get(k.name);
+          if (!val) continue;
+          const parsed = JSON.parse(val);
+          days.push({ date: k.name.slice('usage:'.length), ...parsed });
+        }
+        days.sort((a, b) => a.date.localeCompare(b.date));
+        return json({ days }, 200, origin);
+      } catch (e) {
+        return json({ error: e.message || 'Internal error' }, 500, origin);
       }
     }
 

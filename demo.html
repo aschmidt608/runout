@@ -500,6 +500,27 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 const STORAGE_COLLECTION = 'discogs-collection';
 const DEMO_PASSWORD_STORAGE = 'demo-password';
 
+// Real per-generation token usage (from Claude's own response), logged
+// locally for the usage dashboard -- not sent anywhere.
+const USAGE_LOG_STORAGE = 'runout-usage-log';
+const USAGE_LOG_MAX_ENTRIES = 500;
+async function logUsage(usage, poolSize, targetCount){
+  if(!usage) return;
+  try{
+    const rec = await storage.get(USAGE_LOG_STORAGE, false);
+    const log = rec && rec.value ? JSON.parse(rec.value) : [];
+    log.push({
+      ts: Date.now(),
+      inputTokens: usage.input_tokens || 0,
+      outputTokens: usage.output_tokens || 0,
+      poolSize, targetCount,
+      model: 'claude-sonnet-4-6'
+    });
+    while(log.length > USAGE_LOG_MAX_ENTRIES) log.shift();
+    await storage.set(USAGE_LOG_STORAGE, JSON.stringify(log), false);
+  }catch(e){}
+}
+
 // This demo page has no API key input -- the owner's Anthropic key lives
 // server-side in this Worker's secrets, gated by a shared password and a
 // daily request cap. See claude-proxy-worker/ in the repo.
@@ -1366,6 +1387,7 @@ Rules:
       throw new Error(msg || `Demo proxy returned HTTP ${res.status}`);
     }
     const data = await res.json();
+    await logUsage(data.usage, candidateLite.length, targetCount);
     const textBlocks = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n');
     const clean = textBlocks.replace(/```json|```/g,'').trim();
     // Claude is instructed to respond with only JSON, but sometimes prefaces
