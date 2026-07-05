@@ -891,11 +891,17 @@ function discogsRedirectUri(){
 
 async function safeJson(res){
   const text = await res.text();
-  if(!text) throw new Error(`Empty response from server (HTTP ${res.status}). Please try again in a moment.`);
+  if(!text){
+    const err = new Error(`Empty response from server (HTTP ${res.status}). Please try again in a moment.`);
+    err.status = res.status;
+    throw err;
+  }
   try{
     return JSON.parse(text);
   }catch(e){
-    throw new Error(`Server returned an unexpected response (HTTP ${res.status}).`);
+    const err = new Error(`Server returned an unexpected response (HTTP ${res.status}).`);
+    err.status = res.status;
+    throw err;
   }
 }
 
