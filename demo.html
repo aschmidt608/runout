@@ -106,6 +106,7 @@ input[type=text],input[type=password],input[type=number]{
 input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
 .field-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
 .field{flex:1;min-width:180px;}
+.field-fixed{flex:0 0 auto;min-width:0;width:140px;}
 .hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
 .hint a{color:var(--teal);}
 
@@ -310,15 +311,7 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
 
     <!-- CONNECT DISCOGS -->
     <div class="source-pane" id="paneConnect">
-      <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed.</div>
-
-      <label>GetSongBPM API key <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional — get a free one at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">getsongbpm.com/api</a>, coverage will be partial)</span></label>
-      <input type="password" id="bpmKeyInput" placeholder="Paste your GetSongBPM API key">
-      <div class="row-actions" style="margin-top:8px;margin-bottom:16px;">
-        <button class="ghost small" id="btnSaveBpmKey">Save key</button>
-        <button class="ghost small" id="btnClearBpmKey">Clear key</button>
-        <span class="hint" id="bpmKeyHint" style="margin:0;"></span>
-      </div>
+      <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed. BPM lookup (best-effort, coverage partial) runs through the demo proxy, no key needed here.</div>
 
       <div class="row-actions">
         <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
@@ -398,11 +391,11 @@ textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:va
           <button data-mode="minutes">Minutes</button>
         </div>
       </div>
-      <div class="field">
+      <div class="field field-fixed">
         <label id="durValLabel">Number of tracks</label>
         <input type="number" id="durValue" value="12" min="1" max="60">
       </div>
-      <div class="field">
+      <div class="field field-fixed">
         <label>Avg. min / track (estimate)</label>
         <input type="number" id="avgLen" value="4.5" step="0.5" min="1" max="15">
       </div>
@@ -515,10 +508,9 @@ const CLAUDE_PROXY_WORKER_URL = 'https://runout-claude-proxy.thierryennuimusic.w
 const DISCOGS_WORKER_URL = 'https://runout-discogs-oauth.thierryennuimusic.workers.dev';
 const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
 
-// GetSongBPM's API sends permissive CORS headers (access-control-allow-origin: *),
-// so this can be called directly from the browser -- no Worker needed.
-const GETSONGBPM_KEY_STORAGE = 'getsongbpm-api-key';
-const GETSONGBPM_SEARCH_URL = 'https://api.getsong.co/search/';
+// BPM lookup runs through claude-proxy-worker's /demo/bpm route (holds the
+// GetSongBPM key server-side, same reasoning as the Claude API key) rather
+// than a per-user key like the regular index.html uses.
 const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
 
 // Guards against overlapping fetchDiscogsCollection() runs -- e.g. clicking
@@ -583,13 +575,6 @@ async function init(){
       await verifyDemoPassword(key.value);
     }
   }catch(e){}
-  try{
-    const bpmKey = await storage.get(GETSONGBPM_KEY_STORAGE);
-    if(bpmKey && bpmKey.value){
-      $('bpmKeyInput').value = bpmKey.value;
-      $('bpmKeyHint').textContent = 'Key saved.';
-    }
-  }catch(e){}
   await handleTidalCallback();
   await renderTidalStatus();
   await handleDiscogsCallback();
@@ -650,29 +635,16 @@ async function clearDemoPassword(){
   $('demoPasswordHint').textContent = 'Password cleared.';
 }
 
-async function saveBpmKey(){
-  const key = $('bpmKeyInput').value.trim();
-  if(!key){ $('bpmKeyHint').textContent = 'Paste a key first.'; return; }
-  await storage.set(GETSONGBPM_KEY_STORAGE, key);
-  $('bpmKeyHint').textContent = 'Key saved.';
-}
-
-async function clearBpmKey(){
-  await storage.delete(GETSONGBPM_KEY_STORAGE);
-  $('bpmKeyInput').value = '';
-  $('bpmKeyHint').textContent = 'Key cleared.';
-}
-
-async function getSongBpmLookup(apiKey, artist, title){
-  const lookup = `song:${title} artist:${artist}`;
-  const url = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}&type=song&lookup=${encodeURIComponent(lookup)}`;
+async function getSongBpmLookup(demoPassword, artist, title){
   try{
-    const res = await fetch(url);
+    const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/bpm`, {
+      method: 'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ password: demoPassword, artist, title })
+    });
     if(!res.ok) return null;
     const data = await res.json();
-    const tempo = data?.search?.[0]?.tempo;
-    const bpm = Math.round(parseFloat(tempo));
-    return Number.isFinite(bpm) ? bpm : null;
+    return data.bpm || null;
   }catch(e){
     return null;
   }
@@ -1073,20 +1045,20 @@ async function fetchDiscogsCollection(){
       return;
     }
 
-    const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
-    const bpmKey = bpmKeyRec && bpmKeyRec.value;
+    const passwordRec = await storage.get(DEMO_PASSWORD_STORAGE);
+    const demoPassword = passwordRec && passwordRec.value;
     let bpmFound = 0;
-    if(bpmKey){
+    if(demoPassword){
       for(let i=0;i<releases.length;i++){
         setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM (${i+1}/${releases.length})…`));
-        const bpm = await getSongBpmLookup(bpmKey, releases[i].artist, releases[i].title);
+        const bpm = await getSongBpmLookup(demoPassword, releases[i].artist, releases[i].title);
         if(bpm){ releases[i].bpm = bpm; bpmFound++; }
         await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
       }
     }
 
     applyCollection(releases, username, Date.now());
-    setStatus($('discogsFetchStatus'), bpmKey
+    setStatus($('discogsFetchStatus'), demoPassword
       ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound}.`
       : `Loaded ${releases.length} releases from Discogs.`, 'ok');
   }catch(e){
@@ -1554,8 +1526,6 @@ wireFileLoader();
 });
 $('btnSaveDemoPassword').addEventListener('click', saveDemoPassword);
 $('btnClearDemoPassword').addEventListener('click', clearDemoPassword);
-$('btnSaveBpmKey').addEventListener('click', saveBpmKey);
-$('btnClearBpmKey').addEventListener('click', clearBpmKey);
 $('btnTidalConnect').addEventListener('click', connectTidal);
 $('btnTidalDisconnect').addEventListener('click', disconnectTidal);
 $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
