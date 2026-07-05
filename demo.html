@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runout</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#16140F;
+  --bg-panel:#1D1A13;
+  --bg-panel-raised:#242017;
+  --border:#35301F;
+  --border-bright:#4A4326;
+  --text:#F1EAD9;
+  --text-dim:#9A9483;
+  --text-faint:#6B6656;
+  --amber:#E8A33D;
+  --amber-dim:#8A6524;
+  --teal:#3FA9A3;
+  --red:#C1524B;
+  --radius:3px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Work Sans',sans-serif;
+  min-height:100vh;
+  line-height:1.5;
+}
+::selection{background:var(--amber);color:var(--bg);}
+
+.wrap{max-width:900px;margin:0 auto;padding:28px 20px 80px;}
+
+/* header */
+.masthead{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  border-bottom:2px solid var(--border-bright);
+  padding-bottom:18px;margin-bottom:28px;flex-wrap:wrap;gap:10px;
+}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text-faint);margin-bottom:6px;
+}
+.wordmark{
+  font-family:'Oswald',sans-serif;font-weight:700;
+  font-size:38px;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--text);
+}
+.wordmark .accent{color:var(--amber);}
+.mast-meta{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);
+  text-align:right;
+}
+.mast-meta .name{color:var(--text-dim);}
+
+/* panels */
+.panel{
+  background:var(--bg-panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;margin-bottom:18px;
+}
+.panel-head{
+  display:flex;align-items:center;gap:10px;margin-bottom:16px;
+}
+.panel-num{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);
+  border:1px solid var(--amber-dim);border-radius:2px;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.panel-title{
+  font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.06em;
+  text-transform:uppercase;font-weight:600;
+}
+.panel-sub{
+  font-size:13px;color:var(--text-dim);margin:-8px 0 16px 32px;
+}
+
+.source-tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.source-tab{
+  background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--text-faint);font-family:'Oswald',sans-serif;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;font-size:12px;
+  padding:8px 2px;margin-bottom:-1px;cursor:pointer;
+}
+.source-tab:hover{color:var(--text-dim);}
+.source-tab.active{color:var(--amber);border-bottom-color:var(--amber);}
+.source-pane.hidden{display:none;}
+
+label{
+  display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);
+  margin-bottom:6px;
+}
+input[type=text],input[type=password],input[type=number]{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:2px;color:var(--text);padding:10px 12px;
+  font-family:'Work Sans',sans-serif;font-size:14px;
+}
+input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+.field-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.field{flex:1;min-width:180px;}
+.hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
+.hint a{color:var(--teal);}
+
+button{
+  font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;font-size:13px;
+  background:var(--amber);color:#16140F;border:none;
+  border-radius:2px;padding:11px 20px;cursor:pointer;
+}
+button:hover{background:#f2b357;}
+button:disabled{background:var(--border);color:var(--text-faint);cursor:not-allowed;}
+button.ghost{
+  background:transparent;color:var(--text-dim);border:1px solid var(--border-bright);
+}
+button.ghost:hover{color:var(--text);border-color:var(--amber);}
+button.small{padding:7px 12px;font-size:11px;}
+
+.row-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+
+/* chips */
+.chip-group{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+.chip{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;
+  padding:6px 11px;border:1px solid var(--border-bright);border-radius:20px;
+  color:var(--text-dim);cursor:pointer;user-select:none;background:var(--bg);
+}
+.chip:hover{border-color:var(--amber-dim);}
+.chip.active{background:var(--amber);color:#16140F;border-color:var(--amber);font-weight:600;}
+.chip-empty{font-size:12px;color:var(--text-faint);font-style:italic;}
+.chip-more{
+  display:inline-block;background:none;border:none;padding:2px 0;margin-top:2px;
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;
+  text-transform:none;letter-spacing:0;color:var(--teal);cursor:pointer;
+}
+.chip-more:hover{color:var(--amber);}
+
+/* status / spinner */
+.status-line{
+  display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-dim);
+  margin-top:10px;
+}
+.disc{
+  width:16px;height:16px;border-radius:50%;
+  background:repeating-radial-gradient(circle,var(--amber) 0 1px, transparent 1px 3px), #2a2517;
+  border:1px solid var(--amber-dim);
+  animation:spin 1.1s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.status-line.error{color:var(--red);}
+.status-line.ok{color:var(--teal);}
+
+.stat-strip{
+  display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;
+  font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);
+}
+.stat-strip b{color:var(--text);font-size:15px;display:block;font-family:'IBM Plex Mono',monospace;}
+
+/* year range */
+.year-inputs{display:flex;align-items:center;gap:10px;}
+.year-inputs input{width:90px;}
+.year-sep{color:var(--text-faint);font-family:'IBM Plex Mono',monospace;}
+
+textarea{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:2px;color:var(--text);padding:10px 12px;
+  font-family:'Work Sans',sans-serif;font-size:14px;resize:vertical;min-height:56px;
+}
+textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+
+.checkbox-label{
+  display:flex;align-items:center;gap:8px;margin-top:4px;cursor:pointer;
+  font-family:'Work Sans',sans-serif;text-transform:none;letter-spacing:0;
+  color:var(--text-dim);font-size:13px;font-weight:400;
+}
+.checkbox-label input[type=checkbox]{width:auto;accent-color:var(--amber);cursor:pointer;}
+
+.dur-toggle{display:flex;border:1px solid var(--border-bright);border-radius:2px;overflow:hidden;width:fit-content;}
+.dur-toggle button{
+  background:var(--bg);color:var(--text-dim);border-radius:0;padding:9px 16px;font-size:12px;
+}
+.dur-toggle button.active{background:var(--amber);color:#16140F;}
+
+/* results */
+.side-label{
+  font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--amber);
+  margin:26px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border-bright);
+  display:flex;justify-content:space-between;align-items:baseline;
+}
+.side-label span.count{font-family:'IBM Plex Mono',monospace;color:var(--text-faint);font-size:11px;}
+.track{
+  display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);
+}
+.track:last-child{border-bottom:none;}
+.track-num{
+  font-family:'IBM Plex Mono',monospace;color:var(--text-faint);font-size:13px;
+  width:32px;flex-shrink:0;padding-top:2px;
+}
+.track-body{flex:1;min-width:0;}
+.track-title{font-size:15px;font-weight:500;}
+.track-title .yr{color:var(--text-faint);font-weight:400;}
+.track-bpm{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;
+  color:var(--amber);border:1px solid var(--amber-dim);border-radius:2px;
+  padding:1px 6px;margin-left:8px;white-space:nowrap;
+}
+.track-tags{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);margin-top:2px;}
+.track-note{font-size:13px;color:var(--text-dim);font-style:italic;margin-top:6px;line-height:1.45;}
+.track-links{display:flex;gap:10px;margin-top:8px;}
+.track-links a{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;text-decoration:none;
+  color:var(--teal);border:1px solid var(--teal);border-radius:20px;padding:4px 10px;
+}
+.track-links a.discogs{color:var(--text-dim);border-color:var(--border-bright);}
+.track-links a:hover{opacity:.75;}
+
+.playlist-summary{
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+  margin-bottom:6px;
+}
+
+.saved-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;
+}
+.saved-item button{padding:5px 10px;font-size:11px;}
+
+.footnote{font-size:12px;color:var(--text-faint);margin-top:26px;line-height:1.6;}
+.hidden{display:none !important;}
+
+/* modals */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;z-index:100;
+}
+.modal{
+  background:var(--bg-panel-raised);border:1px solid var(--border-bright);
+  border-radius:var(--radius);padding:22px;max-width:400px;width:100%;
+}
+.modal h3{
+  margin:0 0 14px;font-family:'Oswald',sans-serif;font-size:15px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text);
+}
+.modal .row-actions{margin-top:16px;justify-content:flex-end;}
+.modal-error{font-size:12px;color:var(--red);margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Thierry Ennui — Set Prep Utility (Friends demo)</div>
+      <div class="wordmark">RUN<span class="accent">OUT</span></div>
+    </div>
+    <div class="mast-meta" id="mastMeta"></div>
+  </div>
+
+  <!-- STEP 0: DEMO ACCESS -->
+  <div class="panel" id="panelDemoAccess">
+    <div class="panel-head">
+      <div class="panel-num">🔑</div>
+      <div class="panel-title">Demo access</div>
+    </div>
+    <div class="panel-sub">This is a friends-try-it demo — playlist generation runs on the owner's Claude account through a small proxy, capped at a limited number of generations per day. Ask for the password if you don't have it.</div>
+
+    <input type="password" id="demoPasswordInput" placeholder="Demo password">
+
+    <div class="row-actions" style="margin-top:12px;">
+      <button class="small" id="btnSaveDemoPassword">Save password</button>
+      <button class="ghost small" id="btnClearDemoPassword">Clear password</button>
+      <span class="hint" id="demoPasswordHint" style="margin:0;"></span>
+    </div>
+  </div>
+
+  <!-- CONNECT TIDAL -->
+  <div class="panel" id="panelTidal">
+    <div class="panel-head">
+      <div class="panel-num">🎧</div>
+      <div class="panel-title">Connect Tidal</div>
+    </div>
+    <div class="panel-sub">Optional — connect your own Tidal account to push a generated set straight into a new Tidal playlist. Track matching is best-effort (search by artist/title), so review before you play out.</div>
+    <div class="row-actions">
+      <button class="small" id="btnTidalConnect">Connect Tidal</button>
+      <button class="ghost small hidden" id="btnTidalDisconnect">Disconnect</button>
+      <span class="hint" id="tidalStatus" style="margin:0;"></span>
+    </div>
+  </div>
+
+  <!-- STEP 1: LOAD COLLECTION -->
+  <div class="panel" id="panelConnect">
+    <div class="panel-head">
+      <div class="panel-num">1</div>
+      <div class="panel-title">Load the collection</div>
+    </div>
+
+    <div class="source-tabs">
+      <button type="button" class="source-tab active" data-tab="connect">Connect Discogs</button>
+      <button type="button" class="source-tab" data-tab="manual">Load manually</button>
+    </div>
+
+    <!-- CONNECT DISCOGS -->
+    <div class="source-pane" id="paneConnect">
+      <div class="panel-sub" style="margin-left:0;">Log in to fetch your collection automatically — no local script needed.</div>
+
+      <label>GetSongBPM API key <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional — get a free one at <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">getsongbpm.com/api</a>, coverage will be partial)</span></label>
+      <input type="password" id="bpmKeyInput" placeholder="Paste your GetSongBPM API key">
+      <div class="row-actions" style="margin-top:8px;margin-bottom:16px;">
+        <button class="ghost small" id="btnSaveBpmKey">Save key</button>
+        <button class="ghost small" id="btnClearBpmKey">Clear key</button>
+        <span class="hint" id="bpmKeyHint" style="margin:0;"></span>
+      </div>
+
+      <div class="row-actions">
+        <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
+        <button class="ghost small hidden" id="btnDiscogsDisconnect">Disconnect</button>
+        <button class="ghost small hidden" id="btnDiscogsRefresh">Refresh collection</button>
+        <span class="hint" id="discogsStatus" style="margin:0;"></span>
+      </div>
+      <div class="status-line hidden" id="discogsFetchStatus"></div>
+    </div>
+
+    <!-- LOAD MANUALLY -->
+    <div class="source-pane hidden" id="paneManual">
+      <div class="panel-sub" style="margin-left:0;">Alternative to connecting Discogs above, if you'd rather not log in here.</div>
+
+      <ol style="font-size:13px;color:var(--text-dim);padding-left:18px;margin:0 0 16px;">
+        <li style="margin-bottom:6px;">Get a token at Discogs → Settings → <a href="https://www.discogs.com/settings/developers" target="_blank" style="color:var(--teal);">Developers</a> → "Generate new token."</li>
+        <li style="margin-bottom:6px;">Download <code style="color:var(--amber);">fetch_discogs_collection.py</code> (shared alongside this app) and run: <br><span style="font-family:'IBM Plex Mono',monospace;color:var(--text);">python fetch_discogs_collection.py YOUR_USERNAME YOUR_TOKEN</span><br>Optionally add a free <a href="https://getsongbpm.com/api" target="_blank" style="color:var(--teal);">GetSongBPM</a> API key as a third argument to also look up BPM per release (coverage will be partial).</li>
+        <li>Drop the <code style="color:var(--amber);">discogs_collection.json</code> it writes into the box below.</li>
+      </ol>
+
+      <div id="dropZone" style="border:1px dashed var(--border-bright);border-radius:2px;padding:24px;text-align:center;cursor:pointer;">
+        <input type="file" id="collectionFile" accept="application/json,.json" style="display:none;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-dim);">Click to choose discogs_collection.json, or drag it here</div>
+      </div>
+
+      <div class="row-actions" style="margin-top:16px;">
+        <button class="ghost small" id="btnForget">Clear loaded collection</button>
+      </div>
+
+      <div class="status-line hidden" id="connectStatus"></div>
+    </div>
+
+    <div class="stat-strip hidden" id="collectionStats"></div>
+  </div>
+
+  <!-- STEP 2: FILTERS -->
+  <div class="panel hidden" id="panelFilters">
+    <div class="panel-head">
+      <div class="panel-num">2</div>
+      <div class="panel-title">Dial it in</div>
+    </div>
+    <div class="panel-sub">Filters narrow the crate. Vibe hint steers Claude's picks from what's left.</div>
+
+    <label>Genre</label>
+    <div class="chip-group" id="genreChips"></div>
+    <button type="button" class="chip-more hidden" id="genreChipsMore"></button>
+
+    <label style="margin-top:14px;">Style</label>
+    <div class="chip-group" id="styleChips"></div>
+    <button type="button" class="chip-more hidden" id="styleChipsMore"></button>
+
+    <label style="margin-top:14px;">Media format <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(7"/45s, 12"/LPs, etc. — only for releases with format data)</span></label>
+    <div class="chip-group" id="formatChips"></div>
+    <button type="button" class="chip-more hidden" id="formatChipsMore"></button>
+
+    <div class="field-row" style="margin-top:14px;">
+      <div class="field">
+        <label>Year range</label>
+        <div class="year-inputs">
+          <input type="number" id="yearMin" placeholder="1965">
+          <span class="year-sep">—</span>
+          <input type="number" id="yearMax" placeholder="2026">
+        </div>
+      </div>
+      <div class="field">
+        <label>BPM range <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(only excludes releases with a known BPM outside it)</span></label>
+        <div class="year-inputs">
+          <input type="number" id="bpmMin" placeholder="90">
+          <span class="year-sep">—</span>
+          <input type="number" id="bpmMax" placeholder="140">
+        </div>
+      </div>
+      <div class="field">
+        <label>Target length</label>
+        <div class="dur-toggle" id="durToggle">
+          <button data-mode="tracks" class="active">Tracks</button>
+          <button data-mode="minutes">Minutes</button>
+        </div>
+      </div>
+      <div class="field">
+        <label id="durValLabel">Number of tracks</label>
+        <input type="number" id="durValue" value="12" min="1" max="60">
+      </div>
+      <div class="field">
+        <label>Avg. min / track (estimate)</label>
+        <input type="number" id="avgLen" value="4.5" step="0.5" min="1" max="15">
+      </div>
+    </div>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="splitSides">
+      Split into A/B sides (mixtape-style) — off gives one continuous tracklist
+    </label>
+
+    <label>Tempo / mood / origin hint <span style="color:var(--text-faint);text-transform:none;letter-spacing:0;">(no BPM data in Discogs — this is advisory, not a hard filter)</span></label>
+    <textarea id="vibeHint" placeholder="e.g. 110-120bpm, driving and dubby, West African & Brazilian leaning, needs to build not peak"></textarea>
+
+    <label style="margin-top:10px;">Anything else for the curator</label>
+    <textarea id="extraNotes" placeholder="e.g. this is the back half of a sunset set, open warm and build"></textarea>
+
+    <div class="row-actions" style="margin-top:16px;">
+      <button id="btnGenerate">Generate playlist</button>
+      <span class="hint" id="candidateCount" style="margin:0;"></span>
+    </div>
+
+    <div class="status-line hidden" id="generateStatus"></div>
+  </div>
+
+  <!-- STEP 3: RESULTS -->
+  <div class="panel hidden" id="panelResults">
+    <div class="panel-head">
+      <div class="panel-num">3</div>
+      <div class="panel-title">Run sheet</div>
+    </div>
+    <div class="playlist-summary">
+      <div class="stat-strip" id="playlistStats"></div>
+      <div class="row-actions">
+        <button class="ghost small" id="btnCopy">Copy tracklist</button>
+        <button class="ghost small" id="btnSave">Save this set</button>
+        <button class="ghost small" id="btnPushTidal">Push to Tidal</button>
+        <button class="small" id="btnRegenerate">Regenerate</button>
+      </div>
+    </div>
+    <div class="status-line hidden" id="tidalPushStatus"></div>
+    <div id="sideA"></div>
+    <div id="sideB"></div>
+  </div>
+
+  <!-- SAVED SETS -->
+  <div class="panel hidden" id="panelSaved">
+    <div class="panel-head">
+      <div class="panel-num">★</div>
+      <div class="panel-title">Saved sets</div>
+    </div>
+    <div id="savedList"></div>
+  </div>
+
+  <!-- SAVE SET MODAL -->
+  <div class="modal-overlay hidden" id="saveModalOverlay">
+    <div class="modal">
+      <h3>Name this set</h3>
+      <input type="text" id="saveModalInput" placeholder="e.g. Friday warm-up">
+      <div class="modal-error hidden" id="saveModalError">Could not save — try again.</div>
+      <div class="row-actions">
+        <button class="ghost small" id="saveModalCancel">Cancel</button>
+        <button class="small" id="saveModalConfirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COPY FALLBACK MODAL -->
+  <div class="modal-overlay hidden" id="copyModalOverlay">
+    <div class="modal">
+      <h3>Copy tracklist</h3>
+      <div class="hint" style="margin-bottom:8px;">Automatic copy isn't available here — the text below is selected, so press Cmd/Ctrl+C to copy it.</div>
+      <textarea id="copyModalText" readonly style="min-height:180px;font-family:'IBM Plex Mono',monospace;font-size:12px;"></textarea>
+      <div class="row-actions">
+        <button class="small" id="copyModalClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PUSH TO TIDAL MODAL -->
+  <div class="modal-overlay hidden" id="tidalModalOverlay">
+    <div class="modal">
+      <h3>Push to Tidal</h3>
+      <input type="text" id="tidalModalInput" placeholder="e.g. Friday warm-up">
+      <div class="modal-error hidden" id="tidalModalError">Something went wrong — try again.</div>
+      <div class="row-actions">
+        <button class="ghost small" id="tidalModalCancel">Cancel</button>
+        <button class="small" id="tidalModalConfirm">Push</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    This is a demo build: playlist generation runs through a small Cloudflare Worker that holds the owner's Anthropic API key server-side (never sent to your browser) and is gated by the demo password plus a daily generation cap shared across everyone using this page. Everything else works the same as the regular version — your demo password, Tidal/Discogs sessions, and collection all live only in this browser's local storage, nothing is sent anywhere except directly from your device to Tidal's API, through the Claude proxy Worker for playlist generation, or through a small Cloudflare Worker for Discogs (which only signs requests with your token, holds nothing else, and is necessary because Discogs' OAuth 1.0a requires a Consumer Secret that can't safely live in browser JS). Nothing persists if you clear your browser data or switch devices. Connecting Discogs fetches your collection automatically; the manual local-script method still works too, if you'd rather not log in here. Both paths support an optional, best-effort GetSongBPM lookup for tempo data — coverage is partial, weakest for obscure or vinyl-only pressings, so the BPM range filter only excludes releases with a known BPM outside it and anything without a match falls back to the tempo/mood hint. Track duration isn't pulled per-release either way, so length is estimated from the avg-minutes-per-track field above. Media format chips (7"/45s, 12"/LPs, etc.) come from Discogs' own per-release format descriptors and only appear for collections fetched since this feature was added — older saved collections won't have them until re-fetched. Pushing to Tidal matches each track by artist/title search and takes the first hit, so double-check the result — obscure or rare pressings may not match anything at all. Your Discogs login doesn't expire (Discogs' OAuth tokens are valid until you manually revoke access), but your Tidal login expires after about 4 hours with no way to silently refresh it, so you'll occasionally need to reconnect there.
+  </div>
+
+</div>
+
+<script>
+const STORAGE_COLLECTION = 'discogs-collection';
+const DEMO_PASSWORD_STORAGE = 'demo-password';
+
+// This demo page has no API key input -- the owner's Anthropic key lives
+// server-side in this Worker's secrets, gated by a shared password and a
+// daily request cap. See claude-proxy-worker/ in the repo.
+const CLAUDE_PROXY_WORKER_URL = 'https://runout-claude-proxy.thierryennuimusic.workers.dev';
+
+// Discogs OAuth 1.0a needs a Consumer Secret to sign every authenticated
+// request, which can't safely live in this page's JS -- this Worker holds
+// it and signs requests on our behalf. See discogs-oauth-worker/ in the repo.
+const DISCOGS_WORKER_URL = 'https://runout-discogs-oauth.thierryennuimusic.workers.dev';
+const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
+
+// GetSongBPM's API sends permissive CORS headers (access-control-allow-origin: *),
+// so this can be called directly from the browser -- no Worker needed.
+const GETSONGBPM_KEY_STORAGE = 'getsongbpm-api-key';
+const GETSONGBPM_SEARCH_URL = 'https://api.getsong.co/search/';
+const GETSONGBPM_REQUEST_DELAY = 600; // ms, matches fetch_discogs_collection.py's pacing
+
+// Guards against overlapping fetchDiscogsCollection() runs -- e.g. clicking
+// Refresh while a fetch (or its BPM lookups) is still in flight -- which
+// would double up requests and blow past Discogs' rate limit.
+let discogsFetchInFlight = false;
+
+// Tidal OAuth (Authorization Code + PKCE -- no client secret needed, so this
+// stays a static page). Client ID is a public identifier by design, same as
+// how other PKCE clients work -- fine to ship in the page source.
+const TIDAL_CLIENT_ID = 'iyoSzjTEfPxT1uwe';
+const TIDAL_AUTH_URL = 'https://login.tidal.com/authorize';
+const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
+const TIDAL_API_BASE = 'https://openapi.tidal.com/v2';
+const TIDAL_SCOPES = 'playlists.write playlists.read user.read';
+const TIDAL_TOKEN_STORAGE = 'tidal-token';
+
+// Plain localStorage, so this runs as a standalone page -- no Claude.ai
+// artifact sandbox involved. Keeps the get/set/delete/list shape the rest
+// of the app already expects.
+const storage = {
+  async get(key){
+    const v = localStorage.getItem(key);
+    return v === null ? null : { value: v };
+  },
+  async set(key, value){
+    localStorage.setItem(key, value);
+  },
+  async delete(key){
+    localStorage.removeItem(key);
+  },
+  async list(prefix){
+    return { keys: Object.keys(localStorage).filter(k => k.startsWith(prefix)) };
+  }
+};
+
+const state = {
+  username:'',
+  collection:[], genres:[], styles:[], formats:[],
+  selectedGenres:new Set(), selectedStyles:new Set(), selectedFormats:new Set(),
+  candidates:[], playlist:null,
+  chipExpanded:{ genre:false, style:false, format:false }
+};
+
+const $ = id => document.getElementById(id);
+
+function setStatus(el, msg, cls){
+  el.className = 'status-line' + (cls?(' '+cls):'');
+  el.innerHTML = msg;
+  el.classList.remove('hidden');
+}
+function spinnerLine(msg){
+  return `<div class="disc"></div><span>${msg}</span>`;
+}
+
+/* ---------- init / storage ---------- */
+async function init(){
+  try{
+    const key = await storage.get(DEMO_PASSWORD_STORAGE);
+    if(key && key.value){
+      $('demoPasswordInput').value = key.value;
+      $('demoPasswordHint').textContent = 'Password saved.';
+    }
+  }catch(e){}
+  try{
+    const bpmKey = await storage.get(GETSONGBPM_KEY_STORAGE);
+    if(bpmKey && bpmKey.value){
+      $('bpmKeyInput').value = bpmKey.value;
+      $('bpmKeyHint').textContent = 'Key saved.';
+    }
+  }catch(e){}
+  await handleTidalCallback();
+  await renderTidalStatus();
+  await handleDiscogsCallback();
+  await renderDiscogsStatus();
+  try{
+    const coll = await storage.get(STORAGE_COLLECTION, false);
+    if(coll && coll.value){
+      const parsed = JSON.parse(coll.value);
+      state.collection = parsed.releases || [];
+      state.username = parsed.username || '';
+      if(state.collection.length){
+        deriveFacets();
+        renderCollectionStats(parsed.syncedAt);
+        renderFilters();
+        $('panelFilters').classList.remove('hidden');
+        $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded ${new Date(parsed.syncedAt).toLocaleDateString()}`;
+      }
+    }
+  }catch(e){}
+  await renderSavedSets();
+}
+
+async function forgetAccount(){
+  try{ await storage.delete(STORAGE_COLLECTION, false); }catch(e){}
+  state.username=''; state.collection=[];
+  $('panelFilters').classList.add('hidden');
+  $('panelResults').classList.add('hidden');
+  $('collectionStats').classList.add('hidden');
+  $('mastMeta').innerHTML='';
+  setStatus($('connectStatus'), 'Collection cleared.', 'ok');
+}
+
+/* ---------- demo password ---------- */
+async function saveDemoPassword(){
+  const key = $('demoPasswordInput').value.trim();
+  if(!key){ $('demoPasswordHint').textContent = 'Enter the password first.'; return; }
+  await storage.set(DEMO_PASSWORD_STORAGE, key);
+  $('demoPasswordHint').textContent = 'Password saved.';
+}
+
+async function clearDemoPassword(){
+  await storage.delete(DEMO_PASSWORD_STORAGE);
+  $('demoPasswordInput').value = '';
+  $('demoPasswordHint').textContent = 'Password cleared.';
+}
+
+async function saveBpmKey(){
+  const key = $('bpmKeyInput').value.trim();
+  if(!key){ $('bpmKeyHint').textContent = 'Paste a key first.'; return; }
+  await storage.set(GETSONGBPM_KEY_STORAGE, key);
+  $('bpmKeyHint').textContent = 'Key saved.';
+}
+
+async function clearBpmKey(){
+  await storage.delete(GETSONGBPM_KEY_STORAGE);
+  $('bpmKeyInput').value = '';
+  $('bpmKeyHint').textContent = 'Key cleared.';
+}
+
+async function getSongBpmLookup(apiKey, artist, title){
+  const lookup = `song:${title} artist:${artist}`;
+  const url = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}&type=song&lookup=${encodeURIComponent(lookup)}`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const tempo = data?.search?.[0]?.tempo;
+    const bpm = Math.round(parseFloat(tempo));
+    return Number.isFinite(bpm) ? bpm : null;
+  }catch(e){
+    return null;
+  }
+}
+
+/* ---------- tidal oauth (Authorization Code + PKCE) ---------- */
+function base64url(buffer){
+  let str = '';
+  const bytes = new Uint8Array(buffer);
+  for(let i=0;i<bytes.length;i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function randomPkceString(len){
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return base64url(arr.buffer);
+}
+async function sha256(str){
+  return await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+}
+function tidalRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function fetchTidalUsername(token){
+  try{
+    const res = await fetch(`${TIDAL_API_BASE}/users/me`, {
+      headers:{ 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.api+json' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data?.data?.attributes?.username || null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function connectTidal(){
+  const verifier = randomPkceString(64);
+  const challenge = base64url(await sha256(verifier));
+  const state = randomPkceString(16);
+  sessionStorage.setItem('tidal_pkce_verifier', verifier);
+  sessionStorage.setItem('tidal_oauth_state', state);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: TIDAL_CLIENT_ID,
+    redirect_uri: tidalRedirectUri(),
+    scope: TIDAL_SCOPES,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    state
+  });
+  window.location.href = `${TIDAL_AUTH_URL}?${params.toString()}`;
+}
+
+async function disconnectTidal(){
+  await storage.delete(TIDAL_TOKEN_STORAGE);
+  await renderTidalStatus();
+}
+
+async function handleTidalCallback(){
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get('code');
+  const oauthError = url.searchParams.get('error');
+  if(!code && !oauthError) return;
+
+  window.history.replaceState({}, document.title, tidalRedirectUri());
+
+  const expectedState = sessionStorage.getItem('tidal_oauth_state');
+  const verifier = sessionStorage.getItem('tidal_pkce_verifier');
+  sessionStorage.removeItem('tidal_oauth_state');
+  sessionStorage.removeItem('tidal_pkce_verifier');
+
+  if(oauthError){
+    $('tidalStatus').textContent = `Tidal connection failed: ${oauthError}`;
+    return;
+  }
+  if(!verifier || url.searchParams.get('state') !== expectedState){
+    $('tidalStatus').textContent = 'Tidal connection failed: state mismatch, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(TIDAL_TOKEN_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: tidalRedirectUri(),
+        client_id: TIDAL_CLIENT_ID,
+        code_verifier: verifier
+      })
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error_description || data.error || 'Token exchange failed.');
+    const expiresAt = Date.now() + (data.expires_in * 1000);
+    const username = await fetchTidalUsername(data.access_token);
+    await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({access_token: data.access_token, expires_at: expiresAt, username}));
+  }catch(e){
+    $('tidalStatus').textContent = `Tidal connection failed: ${e.message}`;
+  }
+}
+
+async function getTidalSession(){
+  const rec = await storage.get(TIDAL_TOKEN_STORAGE);
+  if(!rec || !rec.value) return null;
+  const parsed = JSON.parse(rec.value);
+  if(!parsed.access_token || Date.now() > parsed.expires_at) return null;
+  return parsed;
+}
+async function getTidalToken(){
+  const session = await getTidalSession();
+  return session ? session.access_token : null;
+}
+
+async function renderTidalStatus(){
+  const session = await getTidalSession();
+  if(session){
+    $('btnTidalConnect').classList.add('hidden');
+    $('btnTidalDisconnect').classList.remove('hidden');
+    let username = session.username;
+    if(!username){
+      username = await fetchTidalUsername(session.access_token);
+      if(username) await storage.set(TIDAL_TOKEN_STORAGE, JSON.stringify({...session, username}));
+    }
+    $('tidalStatus').textContent = username ? `Connected as ${username}.` : 'Connected.';
+  } else {
+    $('btnTidalConnect').classList.remove('hidden');
+    $('btnTidalDisconnect').classList.add('hidden');
+  }
+}
+
+/* ---------- push to tidal ---------- */
+async function pushToTidal(){
+  if(!state.playlist) return;
+  const token = await getTidalToken();
+  if(!token){
+    setStatus($('tidalPushStatus'), 'Connect Tidal above first.', 'error');
+    return;
+  }
+  openTidalModal();
+}
+
+function openTidalModal(){
+  $('tidalModalError').classList.add('hidden');
+  $('tidalModalInput').value = new Date().toLocaleString();
+  $('tidalModalOverlay').classList.remove('hidden');
+  $('tidalModalInput').focus();
+  $('tidalModalInput').select();
+}
+function closeTidalModal(){
+  $('tidalModalOverlay').classList.add('hidden');
+}
+
+async function tidalSearchTrackId(token, artist, title){
+  const q = encodeURIComponent(`${artist} ${title}`);
+  try{
+    const res = await fetch(`${TIDAL_API_BASE}/searchResults/${q}/relationships/tracks?countryCode=US&include=tracks`, {
+      headers:{ 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.api+json' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const first = (data.data || [])[0];
+    return first ? first.id : null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function confirmPushToTidal(){
+  const name = $('tidalModalInput').value.trim();
+  if(!name) return;
+  const token = await getTidalToken();
+  if(!token){
+    $('tidalModalError').textContent = 'Not connected to Tidal — reconnect and try again.';
+    $('tidalModalError').classList.remove('hidden');
+    return;
+  }
+
+  closeTidalModal();
+  const all = [...state.playlist.sideA, ...state.playlist.sideB];
+  const foundIds = [];
+
+  for(let i=0;i<all.length;i++){
+    setStatus($('tidalPushStatus'), spinnerLine(`Searching Tidal (${i+1}/${all.length})…`));
+    const id = await tidalSearchTrackId(token, all[i].artist, all[i].title);
+    if(id) foundIds.push(id);
+    await new Promise(r => setTimeout(r, 400)); // Tidal's API throttles tightly -- stay well under it
+  }
+
+  if(!foundIds.length){
+    setStatus($('tidalPushStatus'), 'No tracks matched on Tidal — nothing to push.', 'error');
+    return;
+  }
+
+  try{
+    setStatus($('tidalPushStatus'), spinnerLine('Creating Tidal playlist…'));
+    const createRes = await fetch(`${TIDAL_API_BASE}/playlists?countryCode=US`, {
+      method: 'POST',
+      headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/vnd.api+json' },
+      body: JSON.stringify({ data:{ type:'playlists', attributes:{ name, accessType:'UNLISTED' } } })
+    });
+    const createData = await createRes.json();
+    if(!createRes.ok) throw new Error(createData?.errors?.[0]?.detail || 'Could not create the Tidal playlist.');
+    const playlistId = createData.data.id;
+
+    setStatus($('tidalPushStatus'), spinnerLine('Adding tracks…'));
+    for(let i=0;i<foundIds.length;i+=50){
+      const chunk = foundIds.slice(i, i+50);
+      const addRes = await fetch(`${TIDAL_API_BASE}/playlists/${playlistId}/relationships/items?countryCode=US`, {
+        method: 'POST',
+        headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/vnd.api+json' },
+        body: JSON.stringify({ data: chunk.map(id => ({ id, type:'tracks' })) })
+      });
+      if(!addRes.ok){
+        const addData = await addRes.json().catch(()=>({}));
+        throw new Error(addData?.errors?.[0]?.detail || 'Playlist created, but adding tracks failed.');
+      }
+    }
+
+    const link = `https://tidal.com/playlist/${playlistId}`;
+    setStatus($('tidalPushStatus'), `Pushed ${foundIds.length} of ${all.length} tracks to Tidal. <a href="${link}" target="_blank" style="color:var(--teal);">Open playlist</a>`, 'ok');
+  }catch(e){
+    setStatus($('tidalPushStatus'), e.message || 'Push to Tidal failed.', 'error');
+  }
+}
+
+/* ---------- discogs oauth (1.0a via signing worker) ---------- */
+function discogsRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function safeJson(res){
+  const text = await res.text();
+  if(!text) throw new Error(`Empty response from server (HTTP ${res.status}). Please try again in a moment.`);
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error(`Server returned an unexpected response (HTTP ${res.status}).`);
+  }
+}
+
+async function connectDiscogs(){
+  try{
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/request-token`, {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ callbackUrl: discogsRedirectUri() })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.error || 'Could not start Discogs login.');
+    sessionStorage.setItem('discogs_oauth_token_secret', data.oauth_token_secret);
+    window.location.href = `https://www.discogs.com/oauth/authorize?oauth_token=${encodeURIComponent(data.oauth_token)}`;
+  }catch(e){
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+async function disconnectDiscogs(){
+  await storage.delete(DISCOGS_TOKEN_STORAGE);
+  await renderDiscogsStatus();
+}
+
+async function handleDiscogsCallback(){
+  const url = new URL(window.location.href);
+  const oauthToken = url.searchParams.get('oauth_token');
+  const oauthVerifier = url.searchParams.get('oauth_verifier');
+  if(!oauthToken || !oauthVerifier) return;
+
+  window.history.replaceState({}, document.title, discogsRedirectUri());
+
+  const tokenSecret = sessionStorage.getItem('discogs_oauth_token_secret');
+  sessionStorage.removeItem('discogs_oauth_token_secret');
+  if(!tokenSecret){
+    $('discogsStatus').textContent = 'Discogs connection failed: missing session state, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/access-token`, {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ oauth_token: oauthToken, oauth_token_secret: tokenSecret, oauth_verifier: oauthVerifier })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.error || 'Token exchange failed.');
+    await storage.set(DISCOGS_TOKEN_STORAGE, JSON.stringify({ oauth_token: data.oauth_token, oauth_token_secret: data.oauth_token_secret }));
+    await fetchDiscogsCollection();
+  }catch(e){
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+async function getDiscogsSession(){
+  const rec = await storage.get(DISCOGS_TOKEN_STORAGE);
+  if(!rec || !rec.value) return null;
+  return JSON.parse(rec.value);
+}
+
+async function discogsApiCall(path, method){
+  const session = await getDiscogsSession();
+  if(!session) throw new Error('Not connected to Discogs.');
+  const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/proxy`, {
+    method: 'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: method || 'GET' })
+  });
+  const data = await safeJson(res);
+  if(!res.ok) throw new Error(data.message || data.error || `Discogs API error (${res.status})`);
+  return data;
+}
+
+async function ensureDiscogsUsername(session){
+  if(session.username) return session.username;
+  try{
+    const identity = await discogsApiCall('/oauth/identity');
+    await storage.set(DISCOGS_TOKEN_STORAGE, JSON.stringify({...session, username: identity.username}));
+    return identity.username;
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderDiscogsStatus(){
+  const session = await getDiscogsSession();
+  if(session){
+    $('btnDiscogsConnect').classList.add('hidden');
+    $('btnDiscogsDisconnect').classList.remove('hidden');
+    $('btnDiscogsRefresh').classList.remove('hidden');
+    const username = await ensureDiscogsUsername(session);
+    $('discogsStatus').textContent = username ? `Connected as ${username}.` : 'Connected.';
+  } else {
+    $('btnDiscogsConnect').classList.remove('hidden');
+    $('btnDiscogsDisconnect').classList.add('hidden');
+    $('btnDiscogsRefresh').classList.add('hidden');
+  }
+}
+
+function stripDiscogsArtistSuffix(name){
+  // Discogs disambiguates same-named artists with a trailing " (2)" etc.
+  return name.replace(/\s*\(\d+\)$/, '');
+}
+
+async function fetchDiscogsCollection(){
+  if(discogsFetchInFlight){
+    setStatus($('discogsFetchStatus'), 'Already fetching — hang tight.', 'error');
+    return;
+  }
+  const session = await getDiscogsSession();
+  if(!session){
+    $('discogsStatus').textContent = 'Connect Discogs first.';
+    return;
+  }
+  const username = await ensureDiscogsUsername(session);
+  if(!username){
+    setStatus($('discogsFetchStatus'), 'Could not identify your Discogs account — try reconnecting.', 'error');
+    return;
+  }
+
+  discogsFetchInFlight = true;
+  $('btnDiscogsRefresh').disabled = true;
+  setStatus($('discogsFetchStatus'), spinnerLine('Fetching your Discogs collection…'));
+  try{
+    const allReleases = [];
+    let page = 1, totalPages = 1;
+    do{
+      setStatus($('discogsFetchStatus'), spinnerLine(`Fetching page ${page} of ${totalPages}…`));
+      const path = `/users/${encodeURIComponent(username)}/collection/folders/0/releases?per_page=100&page=${page}&sort=artist`;
+      const data = await discogsApiCall(path);
+      allReleases.push(...(data.releases || []));
+      totalPages = data.pagination?.pages || 1;
+      page++;
+      if(page <= totalPages) await new Promise(r => setTimeout(r, 1100)); // stay comfortably under Discogs' 60 req/min limit
+    } while(page <= totalPages);
+
+    const releases = allReleases.map(r => {
+      const bi = r.basic_information || {};
+      const artists = bi.artists || [];
+      const artistName = artists.map(a => stripDiscogsArtistSuffix(a.name)).join(', ') || 'Unknown Artist';
+      return {
+        id: r.id,
+        artist: artistName,
+        title: bi.title || 'Untitled',
+        year: bi.year || null,
+        genres: bi.genres || [],
+        styles: bi.styles || [],
+        labels: (bi.labels || []).map(l => l.name),
+        format: (bi.formats || []).map(f => f.name).join(', '),
+        formatDescriptors: (bi.formats || []).flatMap(f => f.descriptions || []),
+        resourceUrl: `https://www.discogs.com/release/${bi.id || r.id}`,
+        bpm: null
+      };
+    });
+
+    if(!releases.length){
+      setStatus($('discogsFetchStatus'), 'No releases found in your Discogs collection.', 'error');
+      return;
+    }
+
+    const bpmKeyRec = await storage.get(GETSONGBPM_KEY_STORAGE);
+    const bpmKey = bpmKeyRec && bpmKeyRec.value;
+    let bpmFound = 0;
+    if(bpmKey){
+      for(let i=0;i<releases.length;i++){
+        setStatus($('discogsFetchStatus'), spinnerLine(`Looking up BPM (${i+1}/${releases.length})…`));
+        const bpm = await getSongBpmLookup(bpmKey, releases[i].artist, releases[i].title);
+        if(bpm){ releases[i].bpm = bpm; bpmFound++; }
+        await new Promise(r => setTimeout(r, GETSONGBPM_REQUEST_DELAY));
+      }
+    }
+
+    applyCollection(releases, username, Date.now());
+    setStatus($('discogsFetchStatus'), bpmKey
+      ? `Loaded ${releases.length} releases from Discogs, BPM matched for ${bpmFound}.`
+      : `Loaded ${releases.length} releases from Discogs.`, 'ok');
+  }catch(e){
+    setStatus($('discogsFetchStatus'), e.message || 'Could not fetch your Discogs collection.', 'error');
+  }finally{
+    discogsFetchInFlight = false;
+    $('btnDiscogsRefresh').disabled = false;
+  }
+}
+
+/* ---------- load collection from local file ---------- */
+function applyCollection(releases, username, syncedAt){
+  state.collection = releases;
+  state.username = username || '';
+  storage.set(STORAGE_COLLECTION, JSON.stringify({releases, syncedAt, username: state.username}), false).catch(()=>{});
+
+  deriveFacets();
+  renderCollectionStats(syncedAt);
+  renderFilters();
+  $('panelFilters').classList.remove('hidden');
+  $('mastMeta').innerHTML = `<div class="name">${state.username}</div>loaded just now`;
+}
+
+function ingestCollectionJson(raw, sourceLabel){
+  let parsed;
+  try{
+    parsed = JSON.parse(raw);
+  }catch(e){
+    setStatus($('connectStatus'), `Couldn't parse ${sourceLabel} — is it the JSON file the script wrote?`, 'error');
+    return;
+  }
+  const releases = parsed.releases || [];
+  if(!releases.length){
+    setStatus($('connectStatus'), `${sourceLabel} has no releases in it.`, 'error');
+    return;
+  }
+  applyCollection(releases, parsed.username, parsed.syncedAt || Date.now());
+  setStatus($('connectStatus'), `Loaded ${releases.length} releases.`, 'ok');
+}
+
+function wireFileLoader(){
+  const zone = $('dropZone');
+  const input = $('collectionFile');
+  zone.addEventListener('click', ()=> input.click());
+  input.addEventListener('change', ()=>{
+    const file = input.files[0];
+    if(!file) return;
+    setStatus($('connectStatus'), spinnerLine('Reading file…'));
+    const reader = new FileReader();
+    reader.onload = () => ingestCollectionJson(reader.result, file.name);
+    reader.onerror = () => setStatus($('connectStatus'), 'Could not read that file.', 'error');
+    reader.readAsText(file);
+  });
+  ['dragover','dragenter'].forEach(evt => zone.addEventListener(evt, e=>{
+    e.preventDefault(); zone.style.borderColor = 'var(--amber)';
+  }));
+  ['dragleave','drop'].forEach(evt => zone.addEventListener(evt, e=>{
+    e.preventDefault(); zone.style.borderColor = 'var(--border-bright)';
+  }));
+  zone.addEventListener('drop', e=>{
+    const file = e.dataTransfer.files[0];
+    if(!file) return;
+    setStatus($('connectStatus'), spinnerLine('Reading file…'));
+    const reader = new FileReader();
+    reader.onload = () => ingestCollectionJson(reader.result, file.name);
+    reader.onerror = () => setStatus($('connectStatus'), 'Could not read that file.', 'error');
+    reader.readAsText(file);
+  });
+}
+
+function deriveFacets(){
+  const g = new Set(), s = new Set(), f = new Set();
+  state.collection.forEach(r=>{
+    r.genres.forEach(x=>g.add(x));
+    r.styles.forEach(x=>s.add(x));
+    (r.formatDescriptors||[]).forEach(x=>f.add(x));
+  });
+  state.genres = [...g].sort();
+  state.styles = [...s].sort();
+  state.formats = [...f].sort();
+}
+
+function renderCollectionStats(syncedAt){
+  const bpmCount = state.collection.filter(r=>r.bpm).length;
+  $('collectionStats').classList.remove('hidden');
+  $('collectionStats').innerHTML = `
+    <div><b>${state.collection.length}</b>releases</div>
+    <div><b>${state.genres.length}</b>genres</div>
+    <div><b>${state.styles.length}</b>styles</div>
+    <div><b>${bpmCount}</b>have BPM</div>
+    <div><b>${new Date(syncedAt).toLocaleDateString()}</b>last synced</div>
+  `;
+}
+
+/* ---------- filters ---------- */
+const CHIP_DISPLAY_LIMIT = 16;
+
+function renderFilters(){
+  renderChipGroup('genreChips', 'genreChipsMore', 'genre', state.genres, state.selectedGenres);
+  renderChipGroup('styleChips', 'styleChipsMore', 'style', state.styles, state.selectedStyles);
+  renderChipGroup('formatChips', 'formatChipsMore', 'format', state.formats, state.selectedFormats);
+  applyFilters();
+}
+function renderChipGroup(elId, moreBtnId, expandKey, values, selectedSet){
+  const el = $(elId);
+  const moreBtn = $(moreBtnId);
+  if(!values.length){
+    el.innerHTML = '<span class="chip-empty">none found</span>';
+    moreBtn.classList.add('hidden');
+    return;
+  }
+
+  const expanded = state.chipExpanded[expandKey];
+  const overflow = values.length - CHIP_DISPLAY_LIMIT;
+  // Keep already-selected chips visible even when collapsed, so an active
+  // filter never silently disappears from view.
+  const visible = expanded || overflow <= 0
+    ? values
+    : values.filter((v, i) => i < CHIP_DISPLAY_LIMIT || selectedSet.has(v));
+
+  el.innerHTML = visible.map(v =>
+    `<span class="chip${selectedSet.has(v)?' active':''}" data-val="${v.replace(/"/g,'&quot;')}">${v}</span>`
+  ).join('');
+  [...el.children].forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const val = chip.dataset.val;
+      if(selectedSet.has(val)) selectedSet.delete(val); else selectedSet.add(val);
+      chip.classList.toggle('active');
+      applyFilters();
+    });
+  });
+
+  if(overflow > 0){
+    moreBtn.classList.remove('hidden');
+    moreBtn.textContent = expanded ? 'Show less' : `Show ${overflow} more`;
+    moreBtn.onclick = () => {
+      state.chipExpanded[expandKey] = !state.chipExpanded[expandKey];
+      renderChipGroup(elId, moreBtnId, expandKey, values, selectedSet);
+    };
+  } else {
+    moreBtn.classList.add('hidden');
+  }
+}
+
+function applyFilters(){
+  const yMin = parseInt($('yearMin').value) || 0;
+  const yMax = parseInt($('yearMax').value) || 9999;
+  const bpmMin = parseInt($('bpmMin').value) || 0;
+  const bpmMax = parseInt($('bpmMax').value) || 999;
+  state.candidates = state.collection.filter(r=>{
+    if(state.selectedGenres.size && !r.genres.some(g=>state.selectedGenres.has(g))) return false;
+    if(state.selectedStyles.size && !r.styles.some(s=>state.selectedStyles.has(s))) return false;
+    if(state.selectedFormats.size && !(r.formatDescriptors||[]).some(f=>state.selectedFormats.has(f))) return false;
+    if(r.year && (r.year < yMin || r.year > yMax)) return false;
+    if(r.bpm && (r.bpm < bpmMin || r.bpm > bpmMax)) return false;
+    return true;
+  });
+  $('candidateCount').textContent = `${state.candidates.length} release${state.candidates.length===1?'':'s'} match current filters`;
+}
+
+/* ---------- duration toggle ---------- */
+function setDurMode(mode){
+  [...$('durToggle').children].forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
+  $('durValLabel').textContent = mode === 'tracks' ? 'Number of tracks' : 'Target minutes';
+  $('durValue').value = mode === 'tracks' ? 12 : 55;
+  $('durToggle').dataset.mode = mode;
+}
+
+/* ---------- claude generation ---------- */
+function shuffledSample(arr, n){
+  const copy = [...arr];
+  for(let i = copy.length -1; i>0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [copy[i],copy[j]] = [copy[j],copy[i]];
+  }
+  return copy.slice(0, n);
+}
+
+async function generatePlaylist(){
+  const demoPassword = $('demoPasswordInput').value.trim();
+  if(!demoPassword){
+    setStatus($('generateStatus'), 'Enter the demo password above first.', 'error');
+    return;
+  }
+  if(!state.candidates.length){
+    setStatus($('generateStatus'), 'No releases match the current filters — loosen them up.', 'error');
+    return;
+  }
+  const mode = $('durToggle').dataset.mode || 'tracks';
+  const durValue = parseFloat($('durValue').value) || (mode==='tracks'?12:55);
+  const avgLen = parseFloat($('avgLen').value) || 4.5;
+  const targetCount = mode === 'tracks' ? Math.round(durValue) : Math.max(1, Math.round(durValue/avgLen));
+  const vibeHint = $('vibeHint').value.trim();
+  const extraNotes = $('extraNotes').value.trim();
+
+  const pool = state.candidates.length > 220 ? shuffledSample(state.candidates, 220) : state.candidates;
+  const candidateLite = pool.map(r => ({
+    id: r.id, artist: r.artist, title: r.title, year: r.year,
+    genres: r.genres, styles: r.styles, bpm: r.bpm || null
+  }));
+  const knownBpmCount = candidateLite.filter(r => r.bpm).length;
+
+  $('btnGenerate').disabled = true;
+  setStatus($('generateStatus'), spinnerLine('Claude is sequencing the set…'));
+
+  const systemPrompt = `You are curating a sequenced playlist for a vinyl DJ's pre-set prep listening on a streaming service. You are given a candidate pool pulled from the DJ's own record collection, already filtered by genre/style/year/BPM. Respond ONLY with valid JSON — no prose, no markdown code fences, no explanation outside the JSON.
+
+Output format: a JSON array of objects, in playing order:
+[{"id": <candidate id, must exactly match an id from the candidate pool>, "note": "<one sentence, max 20 words, on why this track earns its spot or where it sits in the set's arc>"}]
+
+Rules:
+- Choose approximately ${targetCount} tracks (within 2 of that number).
+- Only use ids that appear in the candidate pool. Never invent tracks.
+- Order matters: sequence for a coherent arc (open, build, peak, cool-down) suited to warm-up / transition-prep listening, not a shuffle.
+- Only ${knownBpmCount} of ${candidateLite.length} candidates have a known bpm value (coverage is partial, from a best-effort external lookup) — use it directly for pacing/transitions when present, and fall back to genre/style/year/artist knowledge as a tempo proxy for candidates where bpm is null.
+- Treat any tempo/mood/origin hint as a loose steer on top of that, not a hard filter.
+- Prefer variety across labels and years unless the hint says otherwise.`;
+
+  const userPrompt = JSON.stringify({
+    candidate_pool: candidateLite,
+    target_track_count: targetCount,
+    genre_filters: [...state.selectedGenres],
+    style_filters: [...state.selectedStyles],
+    format_filters: [...state.selectedFormats],
+    tempo_mood_origin_hint: vibeHint || null,
+    additional_notes: extraNotes || null
+  });
+
+  try{
+    const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/generate`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        password: demoPassword,
+        model:'claude-sonnet-4-6',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages:[{role:'user', content: userPrompt}]
+      })
+    });
+    if(!res.ok){
+      const errBody = await safeJson(res).catch(()=>({}));
+      const msg = typeof errBody?.error === 'string' ? errBody.error : errBody?.error?.message;
+      throw new Error(msg || `Demo proxy returned HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const textBlocks = (data.content || []).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+    const clean = textBlocks.replace(/```json|```/g,'').trim();
+    // Claude is instructed to respond with only JSON, but sometimes prefaces
+    // it with a caveat (e.g. when the pool is too small to hit the target
+    // count) -- pull out the array itself rather than assume the whole
+    // response is clean JSON.
+    const arrayMatch = clean.match(/\[[\s\S]*\]/);
+    let picks;
+    try{
+      picks = JSON.parse(arrayMatch ? arrayMatch[0] : clean);
+    }catch(e){
+      throw new Error('Claude didn\'t return usable JSON — try regenerating, or loosen filters if the candidate pool is very small.');
+    }
+
+    const byId = new Map(pool.map(r=>[String(r.id), r]));
+    const tracks = picks
+      .filter(p => byId.has(String(p.id)))
+      .map(p => ({...byId.get(String(p.id)), note: p.note || ''}));
+
+    if(!tracks.length){
+      throw new Error('Claude returned no valid picks — try again or loosen filters.');
+    }
+
+    const splitSides = $('splitSides').checked;
+    const half = Math.ceil(tracks.length/2);
+    state.playlist = {
+      sideA: splitSides ? tracks.slice(0, half) : tracks,
+      sideB: splitSides ? tracks.slice(half) : [],
+      splitSides,
+      avgLen, mode, durValue, targetCount, vibeHint, extraNotes,
+      createdAt: Date.now()
+    };
+    renderPlaylist();
+    $('panelResults').classList.remove('hidden');
+    $('panelResults').scrollIntoView({behavior:'smooth', block:'start'});
+    setStatus($('generateStatus'), `Sequenced ${tracks.length} tracks.`, 'ok');
+  }catch(err){
+    setStatus($('generateStatus'), (err.message || 'Generation failed') , 'error');
+  }finally{
+    $('btnGenerate').disabled = false;
+  }
+}
+
+function tidalLink(t){
+  return `https://tidal.com/search?q=${encodeURIComponent(t.artist + ' ' + t.title)}`;
+}
+
+function renderSide(elId, headerText, numLabel, tracks){
+  const el = $(elId);
+  if(!tracks.length){ el.innerHTML=''; return; }
+  const rows = tracks.map((t,i)=>`
+    <div class="track">
+      <div class="track-num">${numLabel}${i+1}</div>
+      <div class="track-body">
+        <div class="track-title">${escapeHtml(t.artist)} — ${escapeHtml(t.title)} <span class="yr">${t.year||''}</span>${t.bpm ? `<span class="track-bpm">${t.bpm} BPM</span>` : ''}</div>
+        <div class="track-tags">${[...(t.genres||[]), ...(t.styles||[])].join(' · ')}</div>
+        ${t.note ? `<div class="track-note">${escapeHtml(t.note)}</div>` : ''}
+        <div class="track-links">
+          <a href="${tidalLink(t)}" target="_blank">Tidal search</a>
+          <a class="discogs" href="${t.resourceUrl}" target="_blank">Discogs</a>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  el.innerHTML = `<div class="side-label">${headerText}<span class="count">${tracks.length} tracks</span></div>${rows}`;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderPlaylist(){
+  if(!state.playlist) return;
+  const all = [...state.playlist.sideA, ...state.playlist.sideB];
+  const estMinutes = Math.round(all.length * state.playlist.avgLen);
+  $('playlistStats').innerHTML = `
+    <div><b>${all.length}</b>tracks</div>
+    <div><b>~${estMinutes}m</b>est. runtime</div>
+  `;
+  const splitSides = state.playlist.splitSides !== false;
+  if(splitSides){
+    renderSide('sideA', 'Side A', 'A', state.playlist.sideA);
+    renderSide('sideB', 'Side B', 'B', state.playlist.sideB);
+  } else {
+    renderSide('sideA', 'Tracklist', '', all);
+    $('sideB').innerHTML = '';
+  }
+}
+
+function copyTracklist(){
+  if(!state.playlist) return;
+  const all = [...state.playlist.sideA, ...state.playlist.sideB];
+  const text = all.map((t,i)=>`${i+1}. ${t.artist} — ${t.title}${t.year?` (${t.year})`:''}`).join('\n');
+
+  const showCopied = () => {
+    $('btnCopy').textContent = 'Copied';
+    setTimeout(()=> $('btnCopy').textContent = 'Copy tracklist', 1400);
+  };
+
+  const legacyCopy = () => {
+    let ok = false;
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    }catch(e){ ok = false; }
+    if(ok) showCopied();
+    else openCopyModal(text);
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(showCopied).catch(legacyCopy);
+  } else {
+    legacyCopy();
+  }
+}
+
+function openCopyModal(text){
+  $('copyModalText').value = text;
+  $('copyModalOverlay').classList.remove('hidden');
+  $('copyModalText').focus();
+  $('copyModalText').select();
+}
+function closeCopyModal(){
+  $('copyModalOverlay').classList.add('hidden');
+}
+
+/* ---------- saved sets ---------- */
+function savePlaylist(){
+  if(!state.playlist) return;
+  openSaveModal();
+}
+
+function openSaveModal(){
+  $('saveModalError').classList.add('hidden');
+  $('saveModalInput').value = new Date().toLocaleString();
+  $('saveModalOverlay').classList.remove('hidden');
+  $('saveModalInput').focus();
+  $('saveModalInput').select();
+}
+function closeSaveModal(){
+  $('saveModalOverlay').classList.add('hidden');
+}
+
+async function confirmSavePlaylist(){
+  const label = $('saveModalInput').value.trim();
+  if(!label) return;
+  const key = `playlist-${Date.now()}`;
+  try{
+    await storage.set(key, JSON.stringify({...state.playlist, label}), false);
+    await renderSavedSets();
+    closeSaveModal();
+    $('btnSave').textContent = 'Saved';
+    setTimeout(()=> $('btnSave').textContent = 'Save this set', 1400);
+  }catch(e){
+    $('saveModalError').classList.remove('hidden');
+  }
+}
+
+async function renderSavedSets(){
+  try{
+    const list = await storage.list('playlist-', false);
+    if(!list || !list.keys || !list.keys.length){
+      $('panelSaved').classList.add('hidden');
+      return;
+    }
+    $('panelSaved').classList.remove('hidden');
+    const items = await Promise.all(list.keys.map(k => storage.get(k, false)));
+    const parsed = items.filter(Boolean).map(i => ({...JSON.parse(i.value), key:i.key}))
+      .sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    $('savedList').innerHTML = parsed.map(p => {
+      const count = (p.sideA?.length||0) + (p.sideB?.length||0);
+      return `<div class="saved-item">
+        <span>${escapeHtml(p.label || 'Untitled set')} — ${count} tracks</span>
+        <span class="row-actions">
+          <button class="ghost small" data-load="${p.key}">Load</button>
+          <button class="ghost small" data-del="${p.key}">Delete</button>
+        </span>
+      </div>`;
+    }).join('');
+    [...$('savedList').querySelectorAll('[data-load]')].forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const rec = parsed.find(p=>p.key===b.dataset.load);
+        if(rec){
+          state.playlist = rec;
+          renderPlaylist();
+          $('panelResults').classList.remove('hidden');
+          $('panelResults').scrollIntoView({behavior:'smooth'});
+        }
+      });
+    });
+    [...$('savedList').querySelectorAll('[data-del]')].forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        await storage.delete(b.dataset.del, false);
+        renderSavedSets();
+      });
+    });
+  }catch(e){}
+}
+
+function switchSourceTab(tab){
+  [...document.querySelectorAll('.source-tab')].forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  $('paneConnect').classList.toggle('hidden', tab !== 'connect');
+  $('paneManual').classList.toggle('hidden', tab !== 'manual');
+}
+
+/* ---------- wiring ---------- */
+wireFileLoader();
+[...document.querySelectorAll('.source-tab')].forEach(btn=>{
+  btn.addEventListener('click', () => switchSourceTab(btn.dataset.tab));
+});
+$('btnSaveDemoPassword').addEventListener('click', saveDemoPassword);
+$('btnClearDemoPassword').addEventListener('click', clearDemoPassword);
+$('btnSaveBpmKey').addEventListener('click', saveBpmKey);
+$('btnClearBpmKey').addEventListener('click', clearBpmKey);
+$('btnTidalConnect').addEventListener('click', connectTidal);
+$('btnTidalDisconnect').addEventListener('click', disconnectTidal);
+$('btnDiscogsConnect').addEventListener('click', connectDiscogs);
+$('btnDiscogsDisconnect').addEventListener('click', disconnectDiscogs);
+$('btnDiscogsRefresh').addEventListener('click', fetchDiscogsCollection);
+$('btnForget').addEventListener('click', forgetAccount);
+$('btnGenerate').addEventListener('click', generatePlaylist);
+$('btnRegenerate').addEventListener('click', generatePlaylist);
+$('btnCopy').addEventListener('click', copyTracklist);
+$('btnSave').addEventListener('click', savePlaylist);
+$('btnPushTidal').addEventListener('click', pushToTidal);
+$('copyModalClose').addEventListener('click', closeCopyModal);
+$('saveModalCancel').addEventListener('click', closeSaveModal);
+$('saveModalConfirm').addEventListener('click', confirmSavePlaylist);
+$('saveModalInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') confirmSavePlaylist();
+  if(e.key === 'Escape') closeSaveModal();
+});
+$('tidalModalCancel').addEventListener('click', closeTidalModal);
+$('tidalModalConfirm').addEventListener('click', confirmPushToTidal);
+$('tidalModalInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') confirmPushToTidal();
+  if(e.key === 'Escape') closeTidalModal();
+});
+['yearMin','yearMax','bpmMin','bpmMax'].forEach(id => $(id).addEventListener('input', applyFilters));
+[...$('durToggle').children].forEach(b => b.addEventListener('click', ()=> setDurMode(b.dataset.mode)));
+$('durToggle').dataset.mode = 'tracks';
+
+init();
+</script>
+</body>
+</html>

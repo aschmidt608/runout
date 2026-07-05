@@ -1,0 +1,18 @@
+name = "runout-claude-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# Secrets (ANTHROPIC_API_KEY, DEMO_PASSWORD) are NOT set here -- set them
+# with `wrangler secret put ANTHROPIC_API_KEY` (and DEMO_PASSWORD), or via
+# the Cloudflare dashboard's Worker > Settings > Variables page. Never
+# commit them to this file or anywhere in the repo.
+
+# KV namespace for the daily request counter. Create it once with:
+#   wrangler kv namespace create RUNOUT_DEMO_KV
+# then replace the id below with the one it prints.
+kv_namespaces = [
+  { binding = "RUNOUT_DEMO_KV", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+]
+
+[vars]
+DAILY_REQUEST_LIMIT = "50"
