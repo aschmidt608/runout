@@ -58,7 +58,7 @@ def fetch_bpm(artist, title, bpm_key):
     lookup = f"song:{title} artist:{artist}"
     url = (
         f"{BPM_SEARCH_URL}?api_key={urllib.parse.quote(bpm_key)}"
-        f"&type=song&lookup={urllib.parse.quote(lookup)}"
+        f"&type=both&lookup={urllib.parse.quote(lookup)}"
     )
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:

@@ -115,7 +115,7 @@ export default {
         }
 
         const lookup = `song:${title} artist:${artist}`;
-        const bpmUrl = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(env.GETSONGBPM_API_KEY)}&type=song&lookup=${encodeURIComponent(lookup)}`;
+        const bpmUrl = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(env.GETSONGBPM_API_KEY)}&type=both&lookup=${encodeURIComponent(lookup)}`;
         const res = await fetch(bpmUrl);
         if (!res.ok) return json({ bpm: null }, 200, origin);
         const data = await res.json();

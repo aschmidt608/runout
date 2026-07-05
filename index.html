@@ -652,7 +652,7 @@ async function clearBpmKey(){
 
 async function getSongBpmLookup(apiKey, artist, title){
   const lookup = `song:${title} artist:${artist}`;
-  const url = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}&type=song&lookup=${encodeURIComponent(lookup)}`;
+  const url = `${GETSONGBPM_SEARCH_URL}?api_key=${encodeURIComponent(apiKey)}&type=both&lookup=${encodeURIComponent(lookup)}`;
   try{
     const res = await fetch(url);
     if(!res.ok) return null;
