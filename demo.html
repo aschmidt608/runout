@@ -965,8 +965,29 @@ async function discogsApiCall(path, method){
     body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: method || 'GET' })
   });
   const data = await safeJson(res);
-  if(!res.ok) throw new Error(data.message || data.error || `Discogs API error (${res.status})`);
+  if(!res.ok){
+    const err = new Error(data.message || data.error || `Discogs API error (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
+}
+
+async function discogsApiCallWithRetry(path, method){
+  const maxRetries = 3;
+  for(let attempt = 0; ; attempt++){
+    try{
+      return await discogsApiCall(path, method);
+    }catch(e){
+      if(e.status === 429 && attempt < maxRetries){
+        const waitMs = 8000 * (attempt + 1);
+        setStatus($('discogsFetchStatus'), spinnerLine(`Rate limited by Discogs — waiting ${Math.round(waitMs/1000)}s before retrying…`));
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 async function ensureDiscogsUsername(session){
@@ -1028,11 +1049,11 @@ async function fetchDiscogsCollection(){
     do{
       setStatus($('discogsFetchStatus'), spinnerLine(`Fetching page ${page} of ${totalPages}…`));
       const path = `/users/${encodeURIComponent(username)}/collection/folders/0/releases?per_page=100&page=${page}&sort=artist`;
-      const data = await discogsApiCall(path);
+      const data = await discogsApiCallWithRetry(path);
       allReleases.push(...(data.releases || []));
       totalPages = data.pagination?.pages || 1;
       page++;
-      if(page <= totalPages) await new Promise(r => setTimeout(r, 1100)); // stay comfortably under Discogs' 60 req/min limit
+      if(page <= totalPages) await new Promise(r => setTimeout(r, 1500)); // wider margin under Discogs' 60 req/min limit
     } while(page <= totalPages);
 
     const releases = allReleases.map(r => {
