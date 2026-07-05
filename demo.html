@@ -580,7 +580,7 @@ async function init(){
     const key = await storage.get(DEMO_PASSWORD_STORAGE);
     if(key && key.value){
       $('demoPasswordInput').value = key.value;
-      $('demoPasswordHint').textContent = 'Password saved.';
+      await verifyDemoPassword(key.value);
     }
   }catch(e){}
   try{
@@ -623,11 +623,25 @@ async function forgetAccount(){
 }
 
 /* ---------- demo password ---------- */
+async function verifyDemoPassword(password){
+  $('demoPasswordHint').textContent = 'Checking…';
+  try{
+    const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/verify`, {
+      method: 'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ password })
+    });
+    $('demoPasswordHint').textContent = res.ok ? 'Password confirmed.' : 'Wrong password — try again.';
+  }catch(e){
+    $('demoPasswordHint').textContent = 'Could not reach the demo server to check the password.';
+  }
+}
+
 async function saveDemoPassword(){
   const key = $('demoPasswordInput').value.trim();
   if(!key){ $('demoPasswordHint').textContent = 'Enter the password first.'; return; }
   await storage.set(DEMO_PASSWORD_STORAGE, key);
-  $('demoPasswordHint').textContent = 'Password saved.';
+  await verifyDemoPassword(key);
 }
 
 async function clearDemoPassword(){

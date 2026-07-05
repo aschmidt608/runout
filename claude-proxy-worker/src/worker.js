@@ -7,7 +7,10 @@
  * used by anyone who stumbles on it), and are capped at a daily count via
  * Workers KV so a friend can't run up an unbounded bill.
  *
- * Endpoint:
+ * Endpoints:
+ *   POST /demo/verify    { password } -> { ok: true } or 401, no Anthropic
+ *                        call and no effect on the daily count -- just lets
+ *                        the page confirm the password immediately.
  *   POST /demo/generate  { password, model, max_tokens, system, messages }
  *                        -> whatever Anthropic's Messages API returns
  */
@@ -45,6 +48,18 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders(origin) });
+    }
+
+    if (url.pathname === '/demo/verify' && request.method === 'POST') {
+      try {
+        const { password } = await request.json();
+        if (!password || password !== env.DEMO_PASSWORD) {
+          return json({ error: 'Wrong password.' }, 401, origin);
+        }
+        return json({ ok: true }, 200, origin);
+      } catch (e) {
+        return json({ error: e.message || 'Internal error' }, 500, origin);
+      }
     }
 
     if (url.pathname === '/demo/generate' && request.method === 'POST') {
