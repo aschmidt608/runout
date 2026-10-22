@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runout Scan</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Work+Sans:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#16140F;
+  --bg-panel:#1D1A13;
+  --bg-panel-raised:#242017;
+  --border:#35301F;
+  --border-bright:#4A4326;
+  --text:#F1EAD9;
+  --text-dim:#9A9483;
+  --text-faint:#6B6656;
+  --amber:#E8A33D;
+  --amber-dim:#8A6524;
+  --teal:#3FA9A3;
+  --red:#C1524B;
+  --radius:3px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Work Sans',sans-serif;
+  min-height:100vh;
+  line-height:1.5;
+}
+::selection{background:var(--amber);color:var(--bg);}
+
+.wrap{max-width:720px;margin:0 auto;padding:28px 16px 80px;}
+
+/* header */
+.masthead{
+  display:flex;justify-content:space-between;align-items:flex-end;
+  border-bottom:2px solid var(--border-bright);
+  padding-bottom:18px;margin-bottom:28px;flex-wrap:wrap;gap:10px;
+}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text-faint);margin-bottom:6px;
+}
+.wordmark{
+  font-family:'Oswald',sans-serif;font-weight:700;
+  font-size:38px;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--text);
+}
+.wordmark .accent{color:var(--amber);}
+.mast-meta{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);
+  text-align:right;
+}
+.mast-meta a{color:var(--teal);}
+
+/* panels */
+.panel{
+  background:var(--bg-panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;margin-bottom:18px;
+}
+.panel-head{
+  display:flex;align-items:center;gap:10px;margin-bottom:16px;
+}
+.panel-num{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--amber);
+  border:1px solid var(--amber-dim);border-radius:2px;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.panel-title{
+  font-family:'Oswald',sans-serif;font-size:16px;letter-spacing:.06em;
+  text-transform:uppercase;font-weight:600;
+}
+.panel-sub{
+  font-size:13px;color:var(--text-dim);margin:-8px 0 16px 32px;
+}
+
+label{
+  display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);
+  margin-bottom:6px;
+}
+input[type=text],input[type=password]{
+  width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:2px;color:var(--text);padding:10px 12px;
+  font-family:'Work Sans',sans-serif;font-size:14px;
+}
+input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+.field-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;}
+.field{flex:1;min-width:180px;}
+.hint{font-size:12px;color:var(--text-faint);margin-top:6px;}
+.hint a{color:var(--teal);}
+.hint.ok{color:var(--teal);}
+.hint.error{color:var(--red);}
+
+button{
+  font-family:'Oswald',sans-serif;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;font-size:13px;
+  background:var(--amber);color:#16140F;border:none;
+  border-radius:2px;padding:11px 20px;cursor:pointer;
+}
+button:hover{background:#f2b357;}
+button:disabled{background:var(--border);color:var(--text-faint);cursor:not-allowed;}
+button.ghost{
+  background:transparent;color:var(--text-dim);border:1px solid var(--border-bright);
+}
+button.ghost:hover{color:var(--text);border-color:var(--amber);}
+button.small{padding:7px 12px;font-size:11px;}
+
+.row-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+
+/* chips */
+.chip-group{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+.chip{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;
+  padding:6px 11px;border:1px solid var(--border-bright);border-radius:20px;
+  color:var(--text-dim);cursor:pointer;user-select:none;background:var(--bg);
+}
+.chip:hover{border-color:var(--amber-dim);}
+.chip.active{background:var(--amber);color:#16140F;border-color:var(--amber);font-weight:600;}
+
+/* status / spinner */
+.status-line{
+  display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-dim);
+  margin-top:12px;
+}
+.disc{
+  width:16px;height:16px;border-radius:50%;
+  background:repeating-radial-gradient(circle,var(--amber) 0 1px, transparent 1px 3px), #2a2517;
+  border:1px solid var(--amber-dim);
+  animation:spin 1.1s linear infinite;flex-shrink:0;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.status-line.error{color:var(--red);}
+.status-line.ok{color:var(--teal);}
+
+.hidden{display:none !important;}
+.footnote{font-size:12px;color:var(--text-faint);margin-top:26px;line-height:1.6;}
+
+/* capture */
+.capture-btn{
+  width:100%;padding:22px 20px;font-size:17px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+}
+.capture-btn .disc-icon{
+  width:26px;height:26px;border-radius:50%;
+  background:radial-gradient(circle,#16140F 0 3px, var(--amber) 3px 7px, #16140F 7px 8px, transparent 8px),
+             repeating-radial-gradient(circle,#16140F 0 1px, #2a2517 1px 2px);
+  flex-shrink:0;
+}
+.photo-tray{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+.photo-thumb{position:relative;width:84px;height:84px;border:1px solid var(--border-bright);border-radius:2px;overflow:hidden;}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.photo-thumb button{
+  position:absolute;top:3px;right:3px;padding:0;width:20px;height:20px;
+  font-size:12px;line-height:20px;border-radius:50%;background:rgba(22,20,15,.85);color:var(--text);
+}
+
+/* result */
+.album{display:flex;gap:16px;align-items:flex-start;}
+.album-art{
+  width:120px;height:120px;flex-shrink:0;border:1px solid var(--border-bright);border-radius:2px;
+  object-fit:cover;background:#2a2517;
+}
+.album-meta{flex:1;min-width:0;}
+.album-artist{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);}
+.album-title{font-family:'Oswald',sans-serif;font-size:24px;line-height:1.15;font-weight:600;margin:2px 0 6px;overflow-wrap:anywhere;}
+.album-facts{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);line-height:1.7;overflow-wrap:anywhere;}
+.badge{
+  display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em;border-radius:2px;padding:1px 6px;margin-right:6px;
+  border:1px solid var(--border-bright);color:var(--text-dim);
+}
+.badge.high{border-color:var(--teal);color:var(--teal);}
+.badge.medium{border-color:var(--amber-dim);color:var(--amber);}
+.badge.low{border-color:var(--red);color:var(--red);}
+.album-notes{font-size:13px;color:var(--text-dim);font-style:italic;margin-top:10px;}
+
+.section-label{
+  font-family:'Oswald',sans-serif;font-size:14px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--amber);
+  margin:24px 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border-bright);
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+}
+.section-label span.count{font-family:'IBM Plex Mono',monospace;color:var(--text-faint);font-size:11px;letter-spacing:0;text-transform:none;}
+
+.links{display:flex;gap:8px;flex-wrap:wrap;}
+.links a{
+  font-family:'IBM Plex Mono',monospace;font-size:12px;text-decoration:none;
+  color:var(--teal);border:1px solid var(--teal);border-radius:20px;padding:6px 12px;
+  white-space:nowrap;
+}
+.links a.direct{background:var(--teal);color:#16140F;font-weight:600;}
+.links a.yt{color:var(--amber);border-color:var(--amber-dim);}
+.links a.yt.direct{background:var(--amber);border-color:var(--amber);color:#16140F;}
+.links a:hover{opacity:.8;}
+.links.small a{font-size:11px;padding:3px 9px;}
+
+.track{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.track:last-child{border-bottom:none;}
+.track-num{font-family:'IBM Plex Mono',monospace;color:var(--text-faint);font-size:13px;width:34px;flex-shrink:0;padding-top:1px;}
+.track-body{flex:1;min-width:0;}
+.track-title{font-size:15px;font-weight:500;overflow-wrap:anywhere;}
+.track-title .dur{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px;}
+.track-artist{font-size:12px;color:var(--text-dim);}
+.track .links{margin-top:8px;}
+
+.history-item{
+  display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);
+  cursor:pointer;
+}
+.history-item:last-child{border-bottom:none;}
+.history-item img{width:44px;height:44px;object-fit:cover;border-radius:2px;border:1px solid var(--border);flex-shrink:0;}
+.history-item .h-text{flex:1;min-width:0;font-size:13px;}
+.history-item .h-text b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.history-item .h-text span{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+.history-item:hover .h-text b{color:var(--amber);}
+
+details.settings summary{
+  cursor:pointer;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-dim);list-style:none;
+}
+details.settings summary::-webkit-details-marker{display:none;}
+details.settings summary::before{content:'+ ';color:var(--amber);}
+details.settings[open] summary::before{content:'– ';}
+details.settings .settings-body{margin-top:14px;}
+
+@media (max-width:480px){
+  .album-art{width:92px;height:92px;}
+  .album-title{font-size:20px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Thierry Ennui — Record Scanner</div>
+      <div class="wordmark">RUN<span class="accent">OUT</span> SCAN</div>
+    </div>
+    <div class="mast-meta"><a href="index.html">← Set prep</a></div>
+  </div>
+
+  <!-- API KEY (collapses once saved) -->
+  <div class="panel" id="panelApiKey">
+    <div class="panel-head">
+      <div class="panel-num">0</div>
+      <div class="panel-title">Claude API key</div>
+    </div>
+    <div class="panel-sub">Used to read the record from your photo. Shared with the main Runout page (same browser storage) — get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--teal);">console.anthropic.com</a>. Sent only from your device directly to Anthropic.</div>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <div class="row-actions" style="margin-top:10px;">
+      <button class="small" id="btnSaveApiKey">Save key</button>
+      <button class="ghost small" id="btnClearApiKey">Clear key</button>
+      <span class="hint" id="apiKeyHint" style="margin:0;"></span>
+    </div>
+  </div>
+
+  <!-- CAPTURE -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-num">1</div>
+      <div class="panel-title">Snap a record</div>
+    </div>
+    <div class="panel-sub">Front cover, back cover, or the center label all work. Add a second angle if the first guess is shaky — every photo in the tray is sent together.</div>
+    <button class="capture-btn" id="btnCamera"><span class="disc-icon"></span>Take a photo</button>
+    <div class="row-actions" style="margin-top:10px;">
+      <button class="ghost small" id="btnLibrary">Choose from library</button>
+      <button class="ghost small hidden" id="btnRetry">Identify again</button>
+      <button class="ghost small hidden" id="btnClearPhotos">Clear photos</button>
+    </div>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
+    <input type="file" id="libraryInput" accept="image/*" multiple class="hidden">
+    <div class="photo-tray" id="photoTray"></div>
+    <div class="status-line hidden" id="scanStatus"></div>
+  </div>
+
+  <!-- RESULT -->
+  <div class="panel hidden" id="panelResult">
+    <div class="album">
+      <img class="album-art" id="albumArt" alt="">
+      <div class="album-meta">
+        <div class="album-artist" id="albumArtist"></div>
+        <div class="album-title" id="albumTitle"></div>
+        <div class="album-facts" id="albumFacts"></div>
+      </div>
+    </div>
+    <div class="album-notes hidden" id="albumNotes"></div>
+
+    <div class="section-label">Listen to the record</div>
+    <div class="links" id="albumLinks"></div>
+
+    <div class="section-label"><span>Tracks</span><span class="count" id="trackCount"></span></div>
+    <div id="trackList"></div>
+
+    <details class="settings" style="margin-top:22px;">
+      <summary>Wrong record? Fix and search again</summary>
+      <div class="settings-body">
+        <div class="field-row">
+          <div class="field"><label>Artist</label><input type="text" id="fixArtist"></div>
+          <div class="field"><label>Title</label><input type="text" id="fixTitle"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Catalog # <span style="text-transform:none;letter-spacing:0;">(optional)</span></label><input type="text" id="fixCatno"></div>
+        </div>
+        <button class="small" id="btnFixSearch">Search again</button>
+        <div class="hint">Skips Claude and goes straight to the Discogs/MusicBrainz lookup — no API cost.</div>
+      </div>
+    </details>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel">
+    <details class="settings">
+      <summary>Services to show</summary>
+      <div class="settings-body">
+        <div class="chip-group" id="serviceChips"></div>
+        <div class="hint" id="discogsHint"></div>
+      </div>
+    </details>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="panel hidden" id="panelHistory">
+    <div class="panel-head">
+      <div class="panel-title">Recent scans</div>
+    </div>
+    <div id="historyList"></div>
+    <div class="row-actions" style="margin-top:12px;">
+      <button class="ghost small" id="btnClearHistory">Clear history</button>
+    </div>
+  </div>
+
+  <div class="footnote">
+    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it on the main Runout page — reuses the same login and Worker) or MusicBrainz (free, no login), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Links marked solid are direct matches from that data; outlined ones are searches on that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
+  </div>
+
+</div>
+
+<script>
+const API_KEY_STORAGE = 'anthropic-api-key';
+const SERVICES_STORAGE = 'runout-scan-services';
+const HISTORY_STORAGE = 'runout-scan-history';
+const HISTORY_MAX = 20;
+
+const CLAUDE_MODEL = 'claude-opus-5-5';
+
+// Same Worker + token the main page uses -- connecting Discogs there makes
+// it available here too, since both pages share this origin's localStorage.
+const DISCOGS_WORKER_URL = 'https://runout-discogs-oauth.thierryennuimusic.workers.dev';
+const DISCOGS_TOKEN_STORAGE = 'discogs-oauth-token';
+
+const MUSICBRAINZ_API = 'https://musicbrainz.org/ws/2';
+const MUSICBRAINZ_REQUEST_DELAY = 1100; // ms -- MusicBrainz enforces ~1 req/sec per IP
+
+// Images are downscaled before upload -- Claude doesn't benefit from more
+// than ~1568px on the long edge, and phone photos are often 4000px+.
+const MAX_IMAGE_EDGE = 1568;
+const MAX_PHOTOS = 4;
+
+const SERVICES = [
+  { id:'youtube',    name:'YouTube',       search:q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, yt:true },
+  { id:'ytmusic',    name:'YouTube Music', search:q => `https://music.youtube.com/search?q=${encodeURIComponent(q)}` },
+  { id:'spotify',    name:'Spotify',       search:q => `https://open.spotify.com/search/${encodeURIComponent(q)}` },
+  { id:'apple',      name:'Apple Music',   search:q => `https://music.apple.com/us/search?term=${encodeURIComponent(q)}` },
+  { id:'tidal',      name:'Tidal',         search:q => `https://tidal.com/search?q=${encodeURIComponent(q)}` },
+  { id:'deezer',     name:'Deezer',        search:q => `https://www.deezer.com/search/${encodeURIComponent(q)}` },
+  { id:'amazon',     name:'Amazon Music',  search:q => `https://music.amazon.com/search/${encodeURIComponent(q)}` },
+  { id:'bandcamp',   name:'Bandcamp',      search:q => `https://bandcamp.com/search?q=${encodeURIComponent(q)}` },
+  { id:'soundcloud', name:'SoundCloud',    search:q => `https://soundcloud.com/search?q=${encodeURIComponent(q)}` }
+];
+const DEFAULT_SERVICES = ['youtube','ytmusic','spotify','apple','tidal','bandcamp'];
+
+// Maps a MusicBrainz url-rel (or any streaming URL) to one of SERVICES.
+function serviceForUrl(url){
+  let host;
+  try{ host = new URL(url).hostname.replace(/^www\./,''); }catch(e){ return null; }
+  if(host === 'music.youtube.com') return 'ytmusic';
+  if(host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com') return 'youtube';
+  if(host === 'open.spotify.com') return 'spotify';
+  if(host === 'music.apple.com' || host === 'itunes.apple.com') return 'apple';
+  if(host === 'tidal.com' || host === 'listen.tidal.com') return 'tidal';
+  if(host.endsWith('deezer.com')) return 'deezer';
+  if(host.startsWith('music.amazon.')) return 'amazon';
+  if(host.endsWith('bandcamp.com')) return 'bandcamp';
+  if(host === 'soundcloud.com') return 'soundcloud';
+  return null;
+}
+
+const state = {
+  photos: [],          // { dataUrl, base64 }
+  result: null,        // rendered record, see buildResult()
+  enabledServices: new Set(DEFAULT_SERVICES),
+  scanInFlight: false
+};
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function lsGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function lsSet(key, v){ try{ localStorage.setItem(key, v); return true; }catch(e){ return false; } }
+function lsDel(key){ try{ localStorage.removeItem(key); }catch(e){} }
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function setStatus(msg, cls, spinning){
+  const el = $('scanStatus');
+  el.className = 'status-line' + (cls ? (' ' + cls) : '');
+  el.innerHTML = spinning ? `<div class="disc"></div><span>${msg}</span>` : `<span>${msg}</span>`;
+}
+function clearStatus(){ $('scanStatus').className = 'status-line hidden'; }
+
+function stripDiscogsArtistSuffix(name){
+  // Discogs disambiguates same-named artists with a trailing " (2)" etc.
+  return String(name || '').replace(/\s*\(\d+\)$/, '').replace(/\*$/, '');
+}
+function normalize(s){
+  return String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'')
+    .replace(/\(.*?\)|\[.*?\]/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+}
+
+/* ---------- API key ---------- */
+function initApiKey(){
+  const key = lsGet(API_KEY_STORAGE);
+  if(key){
+    $('apiKeyInput').value = key;
+    $('panelApiKey').classList.add('hidden');
+  }
+}
+function saveApiKey(){
+  const key = $('apiKeyInput').value.trim();
+  if(!key){ $('apiKeyHint').textContent = 'Paste a key first.'; return; }
+  lsSet(API_KEY_STORAGE, key);
+  $('apiKeyHint').textContent = 'Key saved.';
+  setTimeout(()=> $('panelApiKey').classList.add('hidden'), 600);
+}
+function clearApiKey(){
+  lsDel(API_KEY_STORAGE);
+  $('apiKeyInput').value = '';
+  $('apiKeyHint').textContent = 'Key cleared.';
+}
+
+/* ---------- services ---------- */
+function initServices(){
+  try{
+    const saved = JSON.parse(lsGet(SERVICES_STORAGE) || 'null');
+    if(Array.isArray(saved) && saved.length) state.enabledServices = new Set(saved);
+  }catch(e){}
+  renderServiceChips();
+}
+function renderServiceChips(){
+  $('serviceChips').innerHTML = SERVICES.map(s =>
+    `<span class="chip ${state.enabledServices.has(s.id) ? 'active' : ''}" data-id="${s.id}">${s.name}</span>`
+  ).join('');
+  $('serviceChips').querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const id = chip.dataset.id;
+      if(state.enabledServices.has(id)){
+        if(state.enabledServices.size === 1) return; // keep at least one
+        state.enabledServices.delete(id);
+      } else {
+        state.enabledServices.add(id);
+      }
+      lsSet(SERVICES_STORAGE, JSON.stringify([...state.enabledServices]));
+      renderServiceChips();
+      if(state.result) renderResult();
+    });
+  });
+}
+function enabledServiceList(){
+  return SERVICES.filter(s => state.enabledServices.has(s.id));
+}
+
+/* ---------- photos ---------- */
+function loadImage(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image — try a JPEG or PNG.')); };
+    img.src = url;
+  });
+}
+function downscale(img, maxEdge, quality){
+  const scale = Math.min(1, maxEdge / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+async function addPhotos(files){
+  if(!files || !files.length) return;
+  const room = MAX_PHOTOS - state.photos.length;
+  const toAdd = [...files].slice(0, Math.max(room, 0));
+  if(!toAdd.length){
+    setStatus(`Up to ${MAX_PHOTOS} photos at once — clear some first.`, 'error');
+    return;
+  }
+  try{
+    for(const file of toAdd){
+      const img = await loadImage(file);
+      const dataUrl = downscale(img, MAX_IMAGE_EDGE, 0.85);
+      const thumb = downscale(img, 160, 0.7);
+      state.photos.push({ dataUrl, thumb, base64: dataUrl.split(',')[1] });
+    }
+  }catch(e){
+    setStatus(e.message, 'error');
+    return;
+  }
+  renderTray();
+  await identify();
+}
+function renderTray(){
+  $('photoTray').innerHTML = state.photos.map((p, i) => `
+    <div class="photo-thumb"><img src="${p.thumb}" alt="Photo ${i+1}"><button data-i="${i}" title="Remove">×</button></div>
+  `).join('');
+  $('photoTray').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    state.photos.splice(Number(b.dataset.i), 1);
+    renderTray();
+  }));
+  const has = state.photos.length > 0;
+  $('btnRetry').classList.toggle('hidden', !has);
+  $('btnClearPhotos').classList.toggle('hidden', !has);
+  $('btnCamera').lastChild.textContent = has ? 'Add another angle' : 'Take a photo';
+}
+
+/* ---------- Claude vision ---------- */
+const IDENTIFY_SYSTEM = `You identify vinyl records from photos for a DJ who wants to listen to the record online.
+
+The photos may show the front cover, back cover, spine, or the center label of the disc itself, possibly at an angle, in poor light, or partly obscured. Read every piece of printed text carefully: artist, title, record label, catalog number (often on the spine, back cover, or label edge, e.g. "FAC 75", "SST 001", "12-INCH 4331"), year, and any side/track listing. If matrix/runout etchings are legible, transcribe them. Identify the release as specifically as the evidence allows: correct spelling matters more than guessing, because your answer is used to search Discogs and MusicBrainz.
+
+Tracklist: if a tracklist is legible in the photos, transcribe it (tracklist_source "photo"). Otherwise, if you are confident which release this is and know its tracklist, give it from memory (tracklist_source "knowledge"). Otherwise return an empty tracklist (tracklist_source "none"). Use vinyl positions (A1, A2, B1...) when known, else numbers. For compilations or splits, fill track artist; otherwise leave it empty.
+
+confidence: "high" when the text clearly names the release, "medium" when you're inferring from partial text or cover art, "low" when it's a best guess. If you can't tell what record it is at all, set identified false and explain what's needed in notes (e.g. "photo the spine or label"). Use empty strings for unknown fields. search_query is the best plain-text query (usually "Artist Title") to find this release on a streaming service.`;
+
+const IDENTIFY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['identified','artist','title','label','catalog_number','year','format','country','matrix_runout','confidence','notes','search_query','tracklist_source','tracklist'],
+  properties: {
+    identified: { type: 'boolean' },
+    artist: { type: 'string' },
+    title: { type: 'string' },
+    label: { type: 'string' },
+    catalog_number: { type: 'string' },
+    year: { type: 'string' },
+    format: { type: 'string', description: 'e.g. LP, 12", 7", 2xLP' },
+    country: { type: 'string' },
+    matrix_runout: { type: 'string' },
+    confidence: { type: 'string', enum: ['high','medium','low'] },
+    notes: { type: 'string', description: 'One or two short sentences: what the identification was based on, or what is uncertain.' },
+    search_query: { type: 'string' },
+    tracklist_source: { type: 'string', enum: ['photo','knowledge','none'] },
+    tracklist: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['position','title','artist'],
+        properties: {
+          position: { type: 'string' },
+          title: { type: 'string' },
+          artist: { type: 'string' }
+        }
+      }
+    }
+  }
+};
+
+async function callClaudeIdentify(apiKey, photos){
+  const content = photos.map(p => ({
+    type: 'image',
+    source: { type: 'base64', media_type: 'image/jpeg', data: p.base64 }
+  }));
+  content.push({ type: 'text', text: photos.length > 1
+    ? `These ${photos.length} photos are all of the same record. Identify it.`
+    : 'Identify this record.' });
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+      // If the primary model declines, the API re-runs on a fallback model
+      // in the same request instead of just stopping.
+      'anthropic-beta': 'server-side-fallback-2026-07-01'
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: 16000,
+      fallbacks: 'default',
+      system: IDENTIFY_SYSTEM,
+      // Low effort keeps this fast -- reading a label is mostly OCR plus
+      // recall, not deep reasoning. Bump it if identifications get sloppy.
+      output_config: {
+        effort: 'low',
+        format: { type: 'json_schema', schema: IDENTIFY_SCHEMA }
+      },
+      messages: [{ role: 'user', content }]
+    })
+  });
+  if(!res.ok){
+    const errBody = await res.json().catch(()=>({}));
+    throw new Error(errBody?.error?.message || `Anthropic API returned HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if(data.stop_reason === 'refusal'){
+    throw new Error('Claude declined to identify this image. Try a different photo.');
+  }
+  if(data.stop_reason === 'max_tokens'){
+    throw new Error('Claude\'s answer was cut off — try again.');
+  }
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    throw new Error('Claude didn\'t return a usable answer — try again.');
+  }
+}
+
+/* ---------- Discogs (optional, via the main page's login) ---------- */
+function getDiscogsSession(){
+  try{ return JSON.parse(lsGet(DISCOGS_TOKEN_STORAGE) || 'null'); }catch(e){ return null; }
+}
+async function safeJson(res){
+  const text = await res.text();
+  if(!text){
+    const err = new Error(`Empty response from server (HTTP ${res.status}).`);
+    err.status = res.status;
+    throw err;
+  }
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    const err = new Error(`Server returned an unexpected response (HTTP ${res.status}).`);
+    err.status = res.status;
+    throw err;
+  }
+}
+async function discogsApiCall(path){
+  const session = getDiscogsSession();
+  if(!session) throw new Error('Not connected to Discogs.');
+  const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/proxy`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: 'GET' })
+  });
+  const data = await safeJson(res);
+  if(!res.ok){
+    const err = new Error(data.message || data.error || `Discogs API error (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+async function lookupDiscogs(id){
+  const attempts = [];
+  if(id.catalog_number) attempts.push({ catno: id.catalog_number, artist: id.artist });
+  if(id.artist && id.title) attempts.push({ artist: id.artist, release_title: id.title });
+  if(id.search_query) attempts.push({ q: id.search_query });
+
+  let hit = null;
+  for(const params of attempts){
+    const qs = new URLSearchParams({ type: 'release', per_page: '5' });
+    for(const [k, v] of Object.entries(params)) if(v) qs.set(k, v);
+    const data = await discogsApiCall(`/database/search?${qs.toString()}`);
+    if(data.results && data.results.length){ hit = data.results[0]; break; }
+  }
+  if(!hit) return null;
+
+  const rel = await discogsApiCall(`/releases/${hit.id}`);
+  const releaseArtist = (rel.artists || []).map(a => stripDiscogsArtistSuffix(a.anv || a.name)).join(', ');
+  const tracks = (rel.tracklist || [])
+    .filter(t => t.type_ === 'track' || !t.type_)
+    .map(t => ({
+      position: t.position || '',
+      title: t.title,
+      artist: (t.artists || []).map(a => stripDiscogsArtistSuffix(a.anv || a.name)).join(', '),
+      duration: t.duration || ''
+    }));
+  const videos = (rel.videos || []).filter(v => v.uri).map(v => ({ uri: v.uri, title: v.title || '' }));
+  const label = (rel.labels || [])[0];
+  return {
+    source: 'Discogs',
+    sourceUrl: rel.uri,
+    artist: releaseArtist || id.artist,
+    title: rel.title || id.title,
+    label: label ? stripDiscogsArtistSuffix(label.name) : id.label,
+    catno: label ? label.catno : id.catalog_number,
+    year: rel.year ? String(rel.year) : id.year,
+    country: rel.country || id.country,
+    format: (rel.formats || []).map(f => [f.qty > 1 ? `${f.qty}×` : '', f.name, ...(f.descriptions || [])].join(' ').trim()).join(', '),
+    cover: (rel.images || []).find(i => i.type === 'primary')?.uri150 || (rel.images || [])[0]?.uri150 || hit.thumb || '',
+    tracks,
+    videos,
+    directLinks: {}
+  };
+}
+
+/* ---------- MusicBrainz (free fallback) ---------- */
+let lastMbCall = 0;
+async function mbFetch(path){
+  const wait = lastMbCall + MUSICBRAINZ_REQUEST_DELAY - Date.now();
+  if(wait > 0) await sleep(wait);
+  lastMbCall = Date.now();
+  const res = await fetch(`${MUSICBRAINZ_API}${path}${path.includes('?') ? '&' : '?'}fmt=json`, {
+    headers: { Accept: 'application/json' }
+  });
+  if(!res.ok) throw new Error(`MusicBrainz returned HTTP ${res.status}`);
+  return res.json();
+}
+function luceneQuote(s){
+  return '"' + String(s).replace(/[\\"]/g, '\\$&') + '"';
+}
+
+async function lookupMusicBrainz(id){
+  const queries = [];
+  if(id.catalog_number) queries.push(`catno:${luceneQuote(id.catalog_number)}` + (id.artist ? ` AND artist:${luceneQuote(id.artist)}` : ''));
+  if(id.artist && id.title) queries.push(`release:${luceneQuote(id.title)} AND artist:${luceneQuote(id.artist)}`);
+
+  let hit = null;
+  for(const q of queries){
+    const data = await mbFetch(`/release/?query=${encodeURIComponent(q)}&limit=5`);
+    const releases = (data.releases || []).filter(r => (r.score ?? 0) >= 80);
+    if(!releases.length) continue;
+    // Prefer a vinyl pressing when several releases score about equally.
+    const top = releases[0].score;
+    hit = releases.find(r => r.score >= top - 5 && (r.media || []).some(m => /vinyl|"/i.test(m.format || ''))) || releases[0];
+    break;
+  }
+  if(!hit) return null;
+
+  const rel = await mbFetch(`/release/${hit.id}?inc=recordings+artist-credits+labels+url-rels+release-groups`);
+  const credit = ac => (ac || []).map(c => c.name + (c.joinphrase || '')).join('').trim();
+  const releaseArtist = credit(rel['artist-credit']);
+  const multiMedium = (rel.media || []).length > 1;
+  const tracks = [];
+  (rel.media || []).forEach((m, mi) => {
+    (m.tracks || []).forEach(t => {
+      const trackArtist = credit(t['artist-credit']);
+      tracks.push({
+        position: t.number || (multiMedium ? `${mi+1}-${t.position}` : String(t.position)),
+        title: t.title,
+        artist: trackArtist && trackArtist !== releaseArtist ? trackArtist : '',
+        duration: t.length ? `${Math.floor(t.length/60000)}:${String(Math.round(t.length/1000)%60).padStart(2,'0')}` : ''
+      });
+    });
+  });
+
+  const directLinks = {};
+  for(const r of rel.relations || []){
+    const url = r.url && r.url.resource;
+    if(!url) continue;
+    const svc = serviceForUrl(url);
+    if(svc && !directLinks[svc]) directLinks[svc] = url;
+  }
+  const label = (rel['label-info'] || [])[0];
+  return {
+    source: 'MusicBrainz',
+    sourceUrl: `https://musicbrainz.org/release/${rel.id}`,
+    artist: releaseArtist || id.artist,
+    title: rel.title || id.title,
+    label: label?.label?.name || id.label,
+    catno: label?.['catalog-number'] || id.catalog_number,
+    year: (rel.date || '').slice(0, 4) || id.year,
+    country: rel.country || id.country,
+    format: (rel.media || []).map(m => m.format).filter(Boolean).join(' + '),
+    cover: rel['cover-art-archive']?.front ? `https://coverartarchive.org/release/${rel.id}/front-250` : '',
+    tracks,
+    videos: [],
+    directLinks
+  };
+}
+
+/* ---------- identify + lookup pipeline ---------- */
+async function identify(){
+  if(state.scanInFlight || !state.photos.length) return;
+  const apiKey = lsGet(API_KEY_STORAGE) || $('apiKeyInput').value.trim();
+  if(!apiKey){
+    $('panelApiKey').classList.remove('hidden');
+    setStatus('Add your Claude API key above first.', 'error');
+    return;
+  }
+  state.scanInFlight = true;
+  $('btnRetry').disabled = true;
+  try{
+    setStatus('Reading the record…', '', true);
+    const id = await callClaudeIdentify(apiKey, state.photos);
+    if(!id.identified){
+      setStatus(escapeHtml(id.notes || 'Couldn\'t tell which record this is — try the spine or center label.'), 'error');
+      return;
+    }
+    await lookupAndRender(id, state.photos[0].thumb);
+  }catch(e){
+    setStatus(escapeHtml(e.message || 'Something went wrong.'), 'error');
+  }finally{
+    state.scanInFlight = false;
+    $('btnRetry').disabled = false;
+  }
+}
+
+async function lookupAndRender(id, thumb){
+  let match = null;
+  const errors = [];
+  if(getDiscogsSession()){
+    setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on Discogs…`, '', true);
+    try{ match = await lookupDiscogs(id); }catch(e){ errors.push(`Discogs: ${e.message}`); }
+  }
+  if(!match){
+    setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on MusicBrainz…`, '', true);
+    try{ match = await lookupMusicBrainz(id); }catch(e){ errors.push(`MusicBrainz: ${e.message}`); }
+  }
+  state.result = buildResult(id, match, thumb);
+  renderResult();
+  saveToHistory(state.result);
+  const tail = errors.length ? ` (${escapeHtml(errors.join('; '))})` : '';
+  setStatus(match
+    ? `Matched on ${match.source}.${tail}`
+    : `No database match — showing what Claude read.${tail}`, match ? 'ok' : '');
+}
+
+function buildResult(id, match, thumb){
+  const m = match || {};
+  let tracks = m.tracks && m.tracks.length ? m.tracks : (id.tracklist || []).map(t => ({...t, duration:''}));
+  let tracklistNote = '';
+  if(!(m.tracks && m.tracks.length)){
+    tracklistNote = id.tracklist_source === 'photo' ? 'Tracklist read from your photo.'
+      : id.tracklist_source === 'knowledge' ? 'Tracklist from Claude\'s memory — double-check it.'
+      : '';
+  }
+  return {
+    ts: Date.now(),
+    artist: m.artist || id.artist,
+    title: m.title || id.title,
+    label: m.label || id.label,
+    catno: m.catno || id.catalog_number,
+    year: m.year || id.year,
+    country: m.country || id.country,
+    format: m.format || id.format,
+    confidence: id.confidence,
+    notes: id.notes,
+    searchQuery: id.search_query || `${id.artist} ${id.title}`,
+    source: m.source || '',
+    sourceUrl: m.sourceUrl || '',
+    cover: m.cover || '',
+    thumb: thumb || '',
+    tracks,
+    tracklistNote,
+    videos: m.videos || [],
+    directLinks: m.directLinks || {},
+    claudeId: id
+  };
+}
+
+/* ---------- rendering ---------- */
+function findVideo(videos, trackTitle){
+  const t = normalize(trackTitle);
+  if(!t || t.length < 2) return null;
+  const re = new RegExp(`(^| )${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( |$)`);
+  return videos.find(v => re.test(normalize(v.title))) || null;
+}
+
+function linkHtml(svc, href, direct, label){
+  const cls = [svc.yt ? 'yt' : '', direct ? 'direct' : ''].filter(Boolean).join(' ');
+  return `<a class="${cls}" href="${escapeHtml(href)}" target="_blank" rel="noopener">${direct ? '▶ ' : ''}${escapeHtml(label || svc.name)}</a>`;
+}
+
+function renderResult(){
+  const r = state.result;
+  if(!r) return;
+  $('panelResult').classList.remove('hidden');
+
+  const art = $('albumArt');
+  art.onerror = () => { if(r.thumb && art.src !== r.thumb) art.src = r.thumb; };
+  art.src = r.cover || r.thumb || '';
+  art.classList.toggle('hidden', !art.src);
+
+  $('albumArtist').textContent = r.artist;
+  $('albumTitle').textContent = r.title;
+  const facts = [
+    [r.label, r.catno].filter(Boolean).join(' · '),
+    [r.format, r.country, r.year].filter(Boolean).join(' · ')
+  ].filter(Boolean).map(escapeHtml);
+  const conf = r.confidence ? `<span class="badge ${r.confidence}">${r.confidence} confidence</span>` : '';
+  const src = r.source ? `<a href="${escapeHtml(r.sourceUrl)}" target="_blank" rel="noopener" style="color:var(--teal);">${r.source} ↗</a>` : '<span>not in Discogs/MusicBrainz</span>';
+  $('albumFacts').innerHTML = facts.join('<br>') + `<div style="margin-top:6px;">${conf}${src}</div>`;
+  $('albumNotes').textContent = r.notes || '';
+  $('albumNotes').classList.toggle('hidden', !r.notes);
+
+  // Album-level: direct link where the database has one, otherwise search.
+  const albumQuery = `${r.artist} ${r.title}`;
+  $('albumLinks').innerHTML = enabledServiceList().map(svc => {
+    const direct = r.directLinks[svc.id];
+    return linkHtml(svc, direct || svc.search(albumQuery), !!direct);
+  }).join('');
+
+  // Track-level: YouTube gets the release's own video when Discogs lists
+  // one for that track; every other service is a track search.
+  $('trackCount').textContent = r.tracks.length
+    ? `${r.tracks.length} tracks${r.tracklistNote ? ' · ' + r.tracklistNote : ''}`
+    : '';
+  if(!r.tracks.length){
+    $('trackList').innerHTML = `<div class="hint">No tracklist found — use the album links above, or add a photo of the back cover.</div>`;
+  } else {
+    $('trackList').innerHTML = r.tracks.map(t => {
+      const trackArtist = t.artist || r.artist;
+      const q = `${trackArtist} ${t.title}`;
+      const links = enabledServiceList().map(svc => {
+        if(svc.id === 'youtube'){
+          const v = findVideo(r.videos, t.title);
+          if(v) return linkHtml(svc, v.uri, true);
+        }
+        return linkHtml(svc, svc.search(q), false);
+      }).join('');
+      return `
+        <div class="track">
+          <div class="track-num">${escapeHtml(t.position)}</div>
+          <div class="track-body">
+            <div class="track-title">${escapeHtml(t.title)}${t.duration ? `<span class="dur">${escapeHtml(t.duration)}</span>` : ''}</div>
+            ${t.artist ? `<div class="track-artist">${escapeHtml(t.artist)}</div>` : ''}
+            <div class="links small">${links}</div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  $('fixArtist').value = r.artist || '';
+  $('fixTitle').value = r.title || '';
+  $('fixCatno').value = r.catno || '';
+  $('panelResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fixAndSearch(){
+  if(state.scanInFlight) return;
+  const artist = $('fixArtist').value.trim();
+  const title = $('fixTitle').value.trim();
+  const catno = $('fixCatno').value.trim();
+  if(!artist && !title && !catno) return;
+  const prev = state.result?.claudeId || {};
+  const id = {
+    ...prev,
+    identified: true,
+    artist, title, catalog_number: catno,
+    label: '', year: '', country: '', format: '',
+    confidence: '', notes: 'Corrected by hand.',
+    search_query: `${artist} ${title}`.trim(),
+    // The old tracklist belonged to the wrong record.
+    tracklist_source: 'none', tracklist: []
+  };
+  state.scanInFlight = true;
+  $('btnFixSearch').disabled = true;
+  try{
+    await lookupAndRender(id, state.result?.thumb);
+  }finally{
+    state.scanInFlight = false;
+    $('btnFixSearch').disabled = false;
+  }
+}
+
+/* ---------- history ---------- */
+function loadHistory(){
+  try{ return JSON.parse(lsGet(HISTORY_STORAGE) || '[]'); }catch(e){ return []; }
+}
+function saveToHistory(result){
+  const history = loadHistory().filter(h => !(normalize(h.artist) === normalize(result.artist) && normalize(h.title) === normalize(result.title)));
+  history.unshift(result);
+  while(history.length > HISTORY_MAX) history.pop();
+  // Thumbnails make this the biggest thing in localStorage -- if it won't
+  // fit, drop the oldest entries until it does.
+  while(history.length && !lsSet(HISTORY_STORAGE, JSON.stringify(history))) history.pop();
+  renderHistory();
+}
+function renderHistory(){
+  const history = loadHistory();
+  $('panelHistory').classList.toggle('hidden', !history.length);
+  $('historyList').innerHTML = history.map((h, i) => `
+    <div class="history-item" data-i="${i}">
+      ${h.cover || h.thumb ? `<img src="${escapeHtml(h.cover || h.thumb)}" alt="">` : ''}
+      <div class="h-text"><b>${escapeHtml(h.artist)} — ${escapeHtml(h.title)}</b><span>${escapeHtml([h.label, h.catno, h.year].filter(Boolean).join(' · '))}</span></div>
+    </div>
+  `).join('');
+  $('historyList').querySelectorAll('.history-item').forEach(el => el.addEventListener('click', () => {
+    state.result = loadHistory()[Number(el.dataset.i)];
+    renderResult();
+  }));
+}
+
+/* ---------- wiring ---------- */
+function init(){
+  initApiKey();
+  initServices();
+  renderHistory();
+  $('discogsHint').innerHTML = getDiscogsSession()
+    ? '✓ Using your Discogs login from the main page for lookups (better matches + YouTube videos).'
+    : 'Tip: connect Discogs on the <a href="index.html">main Runout page</a> for better matches and direct YouTube videos. MusicBrainz is used otherwise.';
+
+  $('btnSaveApiKey').addEventListener('click', saveApiKey);
+  $('btnClearApiKey').addEventListener('click', clearApiKey);
+  $('btnCamera').addEventListener('click', () => $('cameraInput').click());
+  $('btnLibrary').addEventListener('click', () => $('libraryInput').click());
+  $('cameraInput').addEventListener('change', e => { addPhotos(e.target.files); e.target.value = ''; });
+  $('libraryInput').addEventListener('change', e => { addPhotos(e.target.files); e.target.value = ''; });
+  $('btnRetry').addEventListener('click', identify);
+  $('btnClearPhotos').addEventListener('click', () => { state.photos = []; renderTray(); clearStatus(); });
+  $('btnFixSearch').addEventListener('click', fixAndSearch);
+  $('btnClearHistory').addEventListener('click', () => { lsDel(HISTORY_STORAGE); renderHistory(); });
+}
+init();
+</script>
+</body>
+</html>
