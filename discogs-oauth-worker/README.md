@@ -18,6 +18,16 @@ lives in the browser's own `localStorage`, same as everything else in Runout.
 4. Deploy: `wrangler deploy`
 5. Note the URL wrangler prints (looks like `https://runout-discogs-oauth.<your-subdomain>.workers.dev`) -- that's what `index.html` needs to call.
 
+## Automatic deploys
+
+`.github/workflows/deploy-discogs-worker.yml` redeploys this Worker whenever
+anything under `discogs-oauth-worker/` changes on `main` (or on demand from the
+Actions tab). It needs one repo secret, `CLOUDFLARE_API_TOKEN`: a Cloudflare
+API token made from the "Edit Cloudflare Workers" template. Add
+`CLOUDFLARE_ACCOUNT_ID` too if the token can see more than one account.
+Without the token the workflow just skips. The Worker's own secrets live in
+Cloudflare and aren't touched by deploys.
+
 ## Endpoints
 
 - `POST /discogs/request-token` `{ callbackUrl }` -> `{ oauth_token, oauth_token_secret }`

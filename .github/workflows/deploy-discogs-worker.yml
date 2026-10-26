@@ -1,0 +1,61 @@
+name: Deploy Discogs Worker
+
+# Redeploys discogs-oauth-worker/ to Cloudflare whenever its code changes on
+# main. Needs a repo secret CLOUDFLARE_API_TOKEN (Cloudflare API token from
+# the "Edit Cloudflare Workers" template). Optional CLOUDFLARE_ACCOUNT_ID if
+# the token can see more than one account. The Worker's own secrets
+# (DISCOGS_CONSUMER_KEY/SECRET) stay in Cloudflare and are untouched.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'discogs-oauth-worker/**'
+      - '.github/workflows/deploy-discogs-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-discogs-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for Cloudflare token
+        id: token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN secret not set -- skipping Worker deploy."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v4
+
+      - name: Deploy with wrangler
+        if: steps.token.outputs.present == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: discogs-oauth-worker
+          command: deploy
+
+      - name: Smoke-test the new /discogs/public endpoint
+        if: steps.token.outputs.present == 'true'
+        run: |
+          code=$(curl -s -o body.json -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"path":"/database/search?type=release&catno=FACT+75&per_page=1"}' \
+            https://runout-discogs-oauth.thierryennuimusic.workers.dev/discogs/public)
+          echo "HTTP $code"; head -c 300 body.json; echo
+          [ "$code" = "200" ]
