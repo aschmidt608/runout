@@ -201,6 +201,8 @@ button.small{padding:7px 12px;font-size:11px;}
 .links a.yt{color:var(--amber);border-color:var(--amber-dim);}
 .links a.yt.direct{background:var(--amber);border-color:var(--amber);color:#16140F;}
 .links a:hover{opacity:.8;}
+.links a.discogs{color:var(--text);border-color:var(--border-bright);}
+.links a.discogs.direct{background:var(--text);border-color:var(--text);color:#16140F;}
 .links.small a{font-size:11px;padding:3px 9px;}
 
 .track{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
@@ -297,6 +299,7 @@ details.settings .settings-body{margin-top:14px;}
 
     <div class="section-label">Listen to the record</div>
     <div class="links" id="albumLinks"></div>
+    <div class="links" id="discogsLinks" style="margin-top:8px;"></div>
 
     <div class="section-label"><span>Tracks</span><span class="count" id="trackCount"></span></div>
     <div id="trackList"></div>
@@ -317,13 +320,24 @@ details.settings .settings-body{margin-top:14px;}
     </details>
   </div>
 
+  <!-- DISCOGS -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Discogs</div>
+    </div>
+    <div class="hint" id="discogsStatus" style="margin:0 0 12px;"></div>
+    <div class="row-actions">
+      <button class="small" id="btnDiscogsConnect">Connect Discogs</button>
+      <button class="ghost small hidden" id="btnDiscogsDisconnect">Disconnect</button>
+    </div>
+  </div>
+
   <!-- SETTINGS -->
   <div class="panel">
     <details class="settings">
       <summary>Services to show</summary>
       <div class="settings-body">
         <div class="chip-group" id="serviceChips"></div>
-        <div class="hint" id="discogsHint"></div>
       </div>
     </details>
   </div>
@@ -340,7 +354,7 @@ details.settings .settings-body{margin-top:14px;}
   </div>
 
   <div class="footnote">
-    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it on the main Runout page — reuses the same login and Worker) or MusicBrainz (free, no login), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Links marked solid are direct matches from that data; outlined ones are searches on that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
+    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it — here or on the main Runout page, same login) or MusicBrainz (free, no login), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Links marked solid are direct matches from that data; outlined ones are searches on that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
   </div>
 
 </div>
@@ -650,6 +664,92 @@ async function safeJson(res){
     throw err;
   }
 }
+function discogsRedirectUri(){
+  return window.location.origin + window.location.pathname;
+}
+
+async function connectDiscogs(){
+  try{
+    $('btnDiscogsConnect').disabled = true;
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/request-token`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ callbackUrl: discogsRedirectUri() })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.error || 'Could not start Discogs login.');
+    sessionStorage.setItem('discogs_oauth_token_secret', data.oauth_token_secret);
+    window.location.href = `https://www.discogs.com/oauth/authorize?oauth_token=${encodeURIComponent(data.oauth_token)}`;
+  }catch(e){
+    $('btnDiscogsConnect').disabled = false;
+    $('discogsStatus').className = 'hint error';
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+function disconnectDiscogs(){
+  lsDel(DISCOGS_TOKEN_STORAGE);
+  renderDiscogsStatus();
+}
+
+async function handleDiscogsCallback(){
+  const url = new URL(window.location.href);
+  const oauthToken = url.searchParams.get('oauth_token');
+  const oauthVerifier = url.searchParams.get('oauth_verifier');
+  if(!oauthToken || !oauthVerifier) return;
+
+  window.history.replaceState({}, document.title, discogsRedirectUri());
+
+  const tokenSecret = sessionStorage.getItem('discogs_oauth_token_secret');
+  sessionStorage.removeItem('discogs_oauth_token_secret');
+  if(!tokenSecret){
+    $('discogsStatus').className = 'hint error';
+    $('discogsStatus').textContent = 'Discogs connection failed: missing session state, try again.';
+    return;
+  }
+
+  try{
+    const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/access-token`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ oauth_token: oauthToken, oauth_token_secret: tokenSecret, oauth_verifier: oauthVerifier })
+    });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.error || 'Token exchange failed.');
+    lsSet(DISCOGS_TOKEN_STORAGE, JSON.stringify({ oauth_token: data.oauth_token, oauth_token_secret: data.oauth_token_secret }));
+  }catch(e){
+    $('discogsStatus').className = 'hint error';
+    $('discogsStatus').textContent = `Discogs connection failed: ${e.message}`;
+  }
+}
+
+async function ensureDiscogsUsername(session){
+  if(session.username) return session.username;
+  try{
+    const identity = await discogsApiCall('/oauth/identity');
+    lsSet(DISCOGS_TOKEN_STORAGE, JSON.stringify({...session, username: identity.username}));
+    return identity.username;
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderDiscogsStatus(){
+  const session = getDiscogsSession();
+  $('btnDiscogsConnect').classList.toggle('hidden', !!session);
+  $('btnDiscogsDisconnect').classList.toggle('hidden', !session);
+  $('btnDiscogsConnect').disabled = false;
+  if(session){
+    const username = await ensureDiscogsUsername(session);
+    $('discogsStatus').className = 'hint ok';
+    $('discogsStatus').textContent = (username ? `✓ Connected as ${username}.` : '✓ Connected.')
+      + ' Scans are matched on Discogs first — exact pressing, full tracklist, and the release\'s YouTube videos.';
+  } else {
+    $('discogsStatus').className = 'hint';
+    $('discogsStatus').textContent = 'Connect to match scans on Discogs (exact pressing, full tracklist, and the release\'s YouTube videos). Without it, MusicBrainz is used. Same login as the main Runout page.';
+  }
+}
+
 async function discogsApiCall(path){
   const session = getDiscogsSession();
   if(!session) throw new Error('Not connected to Discogs.');
@@ -908,6 +1008,15 @@ function renderResult(){
     return linkHtml(svc, direct || svc.search(albumQuery), !!direct);
   }).join('');
 
+  // Discogs: the matched release page, or a site search when the match
+  // came from MusicBrainz / Claude alone (site search needs no login).
+  const discogsDirect = r.source === 'Discogs' && r.sourceUrl;
+  const discogsQuery = [r.artist, r.catno || r.title].filter(Boolean).join(' ');
+  const discogsHref = discogsDirect || `https://www.discogs.com/search/?type=release&q=${encodeURIComponent(discogsQuery)}`;
+  $('discogsLinks').innerHTML =
+    `<a class="discogs${discogsDirect ? ' direct' : ''}" href="${escapeHtml(discogsHref)}" target="_blank" rel="noopener">${discogsDirect ? '▶ Discogs release' : 'Search Discogs'}</a>`
+    + (discogsDirect ? `<a class="discogs" href="${escapeHtml(discogsHref.replace(/\/release\/(\d+).*/, '/sell/release/$1'))}" target="_blank" rel="noopener">Buy on Discogs</a>` : '');
+
   // Track-level: YouTube gets the release's own video when Discogs lists
   // one for that track; every other service is a track search.
   $('trackCount').textContent = r.tracks.length
@@ -1000,13 +1109,12 @@ function renderHistory(){
 }
 
 /* ---------- wiring ---------- */
-function init(){
+async function init(){
   initApiKey();
   initServices();
   renderHistory();
-  $('discogsHint').innerHTML = getDiscogsSession()
-    ? '✓ Using your Discogs login from the main page for lookups (better matches + YouTube videos).'
-    : 'Tip: connect Discogs on the <a href="index.html">main Runout page</a> for better matches and direct YouTube videos. MusicBrainz is used otherwise.';
+  $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
+  $('btnDiscogsDisconnect').addEventListener('click', disconnectDiscogs);
 
   $('btnSaveApiKey').addEventListener('click', saveApiKey);
   $('btnClearApiKey').addEventListener('click', clearApiKey);
@@ -1018,6 +1126,9 @@ function init(){
   $('btnClearPhotos').addEventListener('click', () => { state.photos = []; renderTray(); clearStatus(); });
   $('btnFixSearch').addEventListener('click', fixAndSearch);
   $('btnClearHistory').addEventListener('click', () => { lsDel(HISTORY_STORAGE); renderHistory(); });
+
+  await handleDiscogsCallback();
+  await renderDiscogsStatus();
 }
 init();
 </script>
