@@ -388,7 +388,9 @@ const SERVICES = [
   { id:'tidal',      name:'Tidal',         search:q => `https://tidal.com/search?q=${encodeURIComponent(q)}` },
   { id:'deezer',     name:'Deezer',        search:q => `https://www.deezer.com/search/${encodeURIComponent(q)}` },
   { id:'amazon',     name:'Amazon Music',  search:q => `https://music.amazon.com/search/${encodeURIComponent(q)}` },
-  { id:'bandcamp',   name:'Bandcamp',      search:q => `https://bandcamp.com/search?q=${encodeURIComponent(q)}` },
+  // Built like Bandcamp's own search form submits it (spaces as "+") --
+  // with %20-encoded spaces it opened an empty search page.
+  { id:'bandcamp',   name:'Bandcamp',      search:(q, kind) => `https://bandcamp.com/search?${new URLSearchParams({ q, item_type: kind === 'album' ? 'a' : 't' })}` },
   { id:'soundcloud', name:'SoundCloud',    search:q => `https://soundcloud.com/search?q=${encodeURIComponent(q)}` }
 ];
 const DEFAULT_SERVICES = ['youtube','ytmusic','spotify','apple','tidal','bandcamp'];
@@ -1005,7 +1007,7 @@ function renderResult(){
   const albumQuery = `${r.artist} ${r.title}`;
   $('albumLinks').innerHTML = enabledServiceList().map(svc => {
     const direct = r.directLinks[svc.id];
-    return linkHtml(svc, direct || svc.search(albumQuery), !!direct);
+    return linkHtml(svc, direct || svc.search(albumQuery, 'album'), !!direct);
   }).join('');
 
   // Discogs: the matched release page, or a site search when the match
@@ -1033,7 +1035,7 @@ function renderResult(){
           const v = findVideo(r.videos, t.title);
           if(v) return linkHtml(svc, v.uri, true);
         }
-        return linkHtml(svc, svc.search(q), false);
+        return linkHtml(svc, svc.search(q, 'track'), false);
       }).join('');
       return `
         <div class="track">
