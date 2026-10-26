@@ -588,7 +588,7 @@ const IDENTIFY_SYSTEM = `You identify vinyl records from photos for a DJ who wan
 
 The photos may show the front cover, back cover, spine, or the center label of the disc itself, possibly at an angle, in poor light, or partly obscured. Read every piece of printed text carefully: artist, title, record label, catalog number (often on the spine, back cover, or label edge, e.g. "FAC 75", "SST 001", "12-INCH 4331"), year, and any side/track listing. If matrix/runout etchings are legible, transcribe them. Identify the release as specifically as the evidence allows: correct spelling matters more than guessing, because your answer is used to search Discogs and MusicBrainz.
 
-Tracklist: if a tracklist is legible in the photos, transcribe it (tracklist_source "photo"). Otherwise, if you are confident which release this is and know its tracklist, give it from memory (tracklist_source "knowledge"). Otherwise return an empty tracklist (tracklist_source "none"). Use vinyl positions (A1, A2, B1...) when known, else numbers. For compilations or splits, fill track artist; otherwise leave it empty.
+Tracklist: if a tracklist is legible in the photos, transcribe it (tracklist_source "photo"). Only add tracks you cannot see if you are certain they belong to this exact release (tracklist_source "knowledge") -- never guess a title. A wrong track is worse than a missing one, because the user will search streaming services for it. For a single where only one side's label is visible, list just that side. If nothing is legible and you aren't certain, return an empty tracklist (tracklist_source "none"). "title" is the release title as printed; for a single showing one side, that side's track title. Use vinyl positions (A1, A2, B1...) when known, else numbers. For compilations or splits, fill track artist; otherwise leave it empty.
 
 confidence: "high" when the text clearly names the release, "medium" when you're inferring from partial text or cover art, "low" when it's a best guess. If you can't tell what record it is at all, set identified false and explain what's needed in notes (e.g. "photo the spine or label"). Use empty strings for unknown fields. search_query is the best plain-text query (usually "Artist Title") to find this release on a streaming service.`;
 
@@ -784,14 +784,22 @@ async function renderDiscogsStatus(){
   }
 }
 
+// Logged in: signed with the user's token. Otherwise: the Worker's
+// /discogs/public endpoint, signed with the app's own key -- Discogs
+// requires some authentication for search, but not a user login.
 async function discogsApiCall(path){
   const session = getDiscogsSession();
-  if(!session) throw new Error('Not connected to Discogs.');
-  const res = await fetch(`${DISCOGS_WORKER_URL}/discogs/proxy`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: 'GET' })
-  });
+  const res = session
+    ? await fetch(`${DISCOGS_WORKER_URL}/discogs/proxy`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ oauth_token: session.oauth_token, oauth_token_secret: session.oauth_token_secret, path, method: 'GET' })
+      })
+    : await fetch(`${DISCOGS_WORKER_URL}/discogs/public`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ path })
+      });
   const data = await safeJson(res);
   if(!res.ok){
     const err = new Error(data.message || data.error || `Discogs API error (${res.status})`);
@@ -801,29 +809,63 @@ async function discogsApiCall(path){
   return data;
 }
 
-async function searchDiscogs(id){
-  const attempts = [];
-  if(id.catalog_number) attempts.push({ catno: id.catalog_number, artist: id.artist });
-  if(id.artist && id.title) attempts.push({ artist: id.artist, release_title: id.title });
-  if(id.search_query) attempts.push({ q: id.search_query });
-
-  for(const params of attempts){
-    const qs = new URLSearchParams({ type: 'release', per_page: '5' });
-    for(const [k, v] of Object.entries(params)) if(v) qs.set(k, v);
-    const data = await discogsApiCall(`/database/search?${qs.toString()}`);
-    if(data.results && data.results.length) return data.results[0];
-  }
-  return null;
+function normCatno(s){
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Discogs' search needs a login, but a release by ID doesn't -- so with
-// no login this goes straight to the public API (25 req/min, plenty here).
+// Discogs search results title releases "Artist - Title".
+function discogsResultMatchesArtist(result, artist){
+  const a = normalize(artist);
+  return !!a && normalize(String(result.title || '').split(' - ')[0]).includes(a);
+}
+
+// Tries narrow searches first. When the photo gave a catalog number, a
+// result only counts if its catno matches -- Discogs' fuzzy ranking will
+// otherwise happily return an unrelated record. Without a catno match,
+// falls back to the first result whose artist matches.
+async function searchDiscogs(id){
+  const catno = normCatno(id.catalog_number);
+  const attempts = [];
+  if(id.catalog_number){
+    attempts.push({ catno: id.catalog_number, artist: id.artist });
+    attempts.push({ catno: id.catalog_number });
+  }
+  if(id.artist && id.title){
+    attempts.push({ artist: id.artist, release_title: id.title });
+    attempts.push({ artist: id.artist, track: id.title }); // singles: label shows a track title
+  }
+  if(id.search_query) attempts.push({ q: id.search_query });
+
+  let artistFallback = null;
+  for(const params of attempts){
+    const qs = new URLSearchParams({ type: 'release', per_page: '25' });
+    for(const [k, v] of Object.entries(params)) if(v) qs.set(k, v);
+    const results = (await discogsApiCall(`/database/search?${qs.toString()}`)).results || [];
+    if(catno){
+      const exact = results.filter(r => normCatno(r.catno) === catno);
+      const best = exact.find(r => discogsResultMatchesArtist(r, id.artist)) || (params.artist ? exact[0] : null);
+      if(best) return best;
+    } else if(results.length && (!id.artist || discogsResultMatchesArtist(results[0], id.artist))){
+      return results[0];
+    }
+    if(!artistFallback) artistFallback = results.find(r => discogsResultMatchesArtist(r, id.artist)) || null;
+  }
+  return artistFallback;
+}
+
+// Release-by-ID goes through the same Worker paths as search. If the
+// Worker predates /discogs/public, fall back to Discogs' public API
+// directly (release lookups don't need auth).
 async function fetchDiscogsRelease(releaseId){
-  if(getDiscogsSession()) return discogsApiCall(`/releases/${releaseId}`);
-  const res = await fetch(`https://api.discogs.com/releases/${releaseId}`, { headers: { Accept: 'application/json' } });
-  const data = await safeJson(res);
-  if(!res.ok) throw new Error(data.message || `Discogs API error (${res.status})`);
-  return data;
+  try{
+    return await discogsApiCall(`/releases/${releaseId}`);
+  }catch(e){
+    if(getDiscogsSession()) throw e;
+    const res = await fetch(`https://api.discogs.com/releases/${releaseId}`, { headers: { Accept: 'application/json' } });
+    const data = await safeJson(res);
+    if(!res.ok) throw new Error(data.message || `Discogs API error (${res.status})`);
+    return data;
+  }
 }
 
 function discogsArtists(list){
@@ -902,15 +944,27 @@ async function lookupMusicBrainz(id){
   if(id.catalog_number) queries.push(`catno:${luceneQuote(id.catalog_number)}` + (id.artist ? ` AND artist:${luceneQuote(id.artist)}` : ''));
   if(id.artist && id.title) queries.push(`release:${luceneQuote(id.title)} AND artist:${luceneQuote(id.artist)}`);
 
+  const catno = normCatno(id.catalog_number);
+  const isVinyl = r => (r.media || []).some(m => /vinyl|"/i.test(m.format || ''));
   let hit = null;
   for(const q of queries){
-    const data = await mbFetch(`/release/?query=${encodeURIComponent(q)}&limit=5`);
+    const data = await mbFetch(`/release/?query=${encodeURIComponent(q)}&limit=10`);
     const releases = (data.releases || []).filter(r => (r.score ?? 0) >= 80);
     if(!releases.length) continue;
+    const exact = catno ? releases.filter(r => (r['label-info'] || []).some(li => normCatno(li['catalog-number']) === catno)) : [];
+    if(exact.length){ hit = exact.find(isVinyl) || exact[0]; break; }
     // Prefer a vinyl pressing when several releases score about equally.
     const top = releases[0].score;
-    hit = releases.find(r => r.score >= top - 5 && (r.media || []).some(m => /vinyl|"/i.test(m.format || ''))) || releases[0];
+    hit = releases.find(r => r.score >= top - 5 && isVinyl(r)) || releases[0];
     break;
+  }
+  // Singles: the label often shows a track title, not the release title --
+  // find a vinyl release containing that recording.
+  if(!hit && id.artist && id.title){
+    const q = `recording:${luceneQuote(id.title)} AND artist:${luceneQuote(id.artist)}`;
+    const data = await mbFetch(`/recording/?query=${encodeURIComponent(q)}&limit=5`);
+    const releases = (data.recordings || []).filter(r => (r.score ?? 0) >= 85).flatMap(r => r.releases || []);
+    hit = releases.find(isVinyl) || releases[0] || null;
   }
   if(!hit) return null;
 
@@ -990,9 +1044,11 @@ async function identify(){
 async function lookupAndRender(id, thumb){
   let match = null;
   const errors = [];
-  if(getDiscogsSession()){
-    setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on Discogs…`, '', true);
-    try{ match = await lookupDiscogs(id); }catch(e){ errors.push(`Discogs: ${e.message}`); }
+  setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on Discogs…`, '', true);
+  try{ match = await lookupDiscogs(id); }catch(e){
+    errors.push(e.status === 404 && !getDiscogsSession()
+      ? 'Discogs search needs the updated Worker deployed, or connect Discogs below'
+      : `Discogs: ${e.message}`);
   }
   if(!match){
     setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on MusicBrainz…`, '', true);
@@ -1096,10 +1152,12 @@ function renderResult(){
   // Discogs: the matched release page, or a site search when the match
   // came from MusicBrainz / Claude alone (site search needs no login).
   const discogsDirect = r.source === 'Discogs' && r.sourceUrl;
-  const discogsQuery = [r.artist, r.catno || r.title].filter(Boolean).join(' ');
-  const discogsHref = discogsDirect || `https://www.discogs.com/search/?type=release&q=${encodeURIComponent(discogsQuery)}`;
+  // Discogs' own site search is too fuzzy for this (it returned unrelated
+  // records for an exact catalog number), so search the web instead.
+  const discogsQuery = 'site:discogs.com ' + [r.artist, r.catno || r.title].filter(Boolean).map(x => `"${x}"`).join(' ');
+  const discogsHref = discogsDirect || `https://www.google.com/search?q=${encodeURIComponent(discogsQuery)}`;
   $('discogsLinks').innerHTML =
-    `<a class="discogs${discogsDirect ? ' direct' : ''}" href="${escapeHtml(discogsHref)}" target="_blank" rel="noopener">${discogsDirect ? '▶ Discogs release' : 'Search Discogs'}</a>`
+    `<a class="discogs${discogsDirect ? ' direct' : ''}" href="${escapeHtml(discogsHref)}" target="_blank" rel="noopener">${discogsDirect ? '▶ Discogs release' : 'Find on Discogs'}</a>`
     + (discogsDirect ? `<a class="discogs" href="${escapeHtml(discogsHref.replace(/\/release\/(\d+).*/, '/sell/release/$1'))}" target="_blank" rel="noopener">Buy on Discogs</a>` : '');
 
   // Track-level: YouTube gets the release's own video when Discogs lists

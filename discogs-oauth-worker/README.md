@@ -23,3 +23,4 @@ lives in the browser's own `localStorage`, same as everything else in Runout.
 - `POST /discogs/request-token` `{ callbackUrl }` -> `{ oauth_token, oauth_token_secret }`
 - `POST /discogs/access-token` `{ oauth_token, oauth_token_secret, oauth_verifier }` -> `{ oauth_token, oauth_token_secret }` (Discogs doesn't return a username here -- call `/discogs/proxy` with `path: "/oauth/identity"` afterward to get it)
 - `POST /discogs/proxy` `{ oauth_token, oauth_token_secret, path, method? }` -> whatever Discogs returns for that path, passed through as-is
+- `POST /discogs/public` `{ path }` -> same, but with no user login: signed with the app's own key/secret (Discogs accepts that for database search). GET-only and limited to `/database/search?...` and `/releases/{id}`. Used by `scan.html` so record lookups work for anyone, logged in or not.

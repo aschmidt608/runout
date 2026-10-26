@@ -16,6 +16,11 @@
  *                                path "/oauth/identity" afterward to get it)
  *   POST /discogs/proxy          { oauth_token, oauth_token_secret, path, method? }
  *                                -> whatever Discogs returns, passed through as-is
+ *   POST /discogs/public         { path } -> whatever Discogs returns
+ *                                (no user login: signed with the app's own
+ *                                key/secret, which Discogs accepts for
+ *                                database search. GET-only, and limited to
+ *                                /database/search and /releases/{id})
  */
 
 const DISCOGS_API = 'https://api.discogs.com';
@@ -75,6 +80,10 @@ async function buildOAuthHeader({ method, url, consumerKey, consumerSecret, toke
     .map(k => `${percentEncode(k)}="${percentEncode(headerParams[k])}"`)
     .join(', ');
 }
+
+// Read-only paths the no-login endpoint will forward -- keeps it from
+// becoming a general-purpose proxy on the app's credentials.
+const PUBLIC_PATHS = [/^\/database\/search\?[^#]*$/, /^\/releases\/\d+$/];
 
 function parseFormBody(text) {
   const params = {};
@@ -181,6 +190,25 @@ export default {
         const res = await fetch(requestUrl, {
           method: httpMethod,
           headers: { Authorization: authHeader, 'User-Agent': USER_AGENT, Accept: 'application/json' }
+        });
+        const data = await res.text();
+        return new Response(data, {
+          status: res.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      }
+
+      if (url.pathname === '/discogs/public' && request.method === 'POST') {
+        const { path } = await request.json();
+        if (!path || !PUBLIC_PATHS.some(re => re.test(path))) {
+          return json({ error: 'path must be /database/search?... or /releases/{id}' }, 400, origin);
+        }
+        const res = await fetch(`${DISCOGS_API}${path}`, {
+          headers: {
+            Authorization: `Discogs key=${env.DISCOGS_CONSUMER_KEY}, secret=${env.DISCOGS_CONSUMER_SECRET}`,
+            'User-Agent': USER_AGENT,
+            Accept: 'application/json'
+          }
         });
         const data = await res.text();
         return new Response(data, {
