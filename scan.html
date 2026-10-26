@@ -198,21 +198,40 @@ button.small{padding:7px 12px;font-size:11px;}
   white-space:nowrap;
 }
 .links a.direct{background:var(--teal);color:#16140F;font-weight:600;}
-.links a.yt{color:var(--amber);border-color:var(--amber-dim);}
-.links a.yt.direct{background:var(--amber);border-color:var(--amber);color:#16140F;}
 .links a:hover{opacity:.8;}
 .links a.discogs{color:var(--text);border-color:var(--border-bright);}
 .links a.discogs.direct{background:var(--text);border-color:var(--text);color:#16140F;}
 .links.small a{font-size:11px;padding:3px 9px;}
 
-.track{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.track{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
 .track:last-child{border-bottom:none;}
 .track-num{font-family:'IBM Plex Mono',monospace;color:var(--text-faint);font-size:13px;width:34px;flex-shrink:0;padding-top:1px;}
 .track-body{flex:1;min-width:0;}
 .track-title{font-size:15px;font-weight:500;overflow-wrap:anywhere;}
 .track-title .dur{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);font-weight:400;margin-left:6px;}
 .track-artist{font-size:12px;color:var(--text-dim);}
-.track .links{margin-top:8px;}
+.track-body{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;}
+.track-main{flex:1 1 180px;min-width:0;}
+.track-icons{display:flex;gap:7px;flex-wrap:wrap;}
+.track-heading{
+  font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-faint);padding:14px 0 4px;border-bottom:1px solid var(--border);
+}
+.track-heading:first-child{padding-top:0;}
+
+.svc-icon{position:relative;display:inline-flex;width:22px;height:22px;flex-shrink:0;border-radius:6px;opacity:.85;}
+.svc-icon:hover,.svc-icon:focus-visible{opacity:1;transform:scale(1.12);}
+.svc-icon:focus-visible{outline:2px solid var(--amber);outline-offset:2px;}
+.svc-icon svg{width:100%;height:100%;display:block;}
+.svc-icon.direct{opacity:1;}
+.svc-icon.direct::after{
+  content:'';position:absolute;right:-3px;top:-3px;width:8px;height:8px;border-radius:50%;
+  background:var(--amber);border:2px solid var(--bg-panel);
+}
+.icon-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
+#albumLinks .svc-icon{width:32px;height:32px;border-radius:8px;}
+#albumLinks .svc-icon.direct::after{width:10px;height:10px;}
+.icon-legend{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-faint);flex-basis:100%;}
 
 .history-item{
   display:flex;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);
@@ -298,7 +317,7 @@ details.settings .settings-body{margin-top:14px;}
     <div class="album-notes hidden" id="albumNotes"></div>
 
     <div class="section-label">Listen to the record</div>
-    <div class="links" id="albumLinks"></div>
+    <div class="icon-row" id="albumLinks"></div>
     <div class="links" id="discogsLinks" style="margin-top:8px;"></div>
 
     <div class="section-label"><span>Tracks</span><span class="count" id="trackCount"></span></div>
@@ -354,7 +373,7 @@ details.settings .settings-body{margin-top:14px;}
   </div>
 
   <div class="footnote">
-    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it — here or on the main Runout page, same login) or MusicBrainz (free, no login), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Links marked solid are direct matches from that data; outlined ones are searches on that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
+    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it — here or on the main Runout page, same login) or MusicBrainz (free, no login; when its entry links to the Discogs release, the tracklist is pulled from Discogs anyway), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Icons with a dot are direct matches from that data; the rest search that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
   </div>
 
 </div>
@@ -381,7 +400,7 @@ const MAX_IMAGE_EDGE = 1568;
 const MAX_PHOTOS = 4;
 
 const SERVICES = [
-  { id:'youtube',    name:'YouTube',       search:q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, yt:true },
+  { id:'youtube',    name:'YouTube',       search:q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` },
   { id:'ytmusic',    name:'YouTube Music', search:q => `https://music.youtube.com/search?q=${encodeURIComponent(q)}` },
   { id:'spotify',    name:'Spotify',       search:q => `https://open.spotify.com/search/${encodeURIComponent(q)}` },
   { id:'apple',      name:'Apple Music',   search:q => `https://music.apple.com/us/search?term=${encodeURIComponent(q)}` },
@@ -393,6 +412,19 @@ const SERVICES = [
   { id:'bandcamp',   name:'Bandcamp',      search:(q, kind) => `https://bandcamp.com/search?${new URLSearchParams({ q, item_type: kind === 'album' ? 'a' : 't' })}` },
   { id:'soundcloud', name:'SoundCloud',    search:q => `https://soundcloud.com/search?q=${encodeURIComponent(q)}` }
 ];
+// Simplified brand marks, drawn inline so there are no extra requests.
+const ICONS = {
+  youtube:   '<rect x="1" y="4.5" width="22" height="15" rx="4.5" fill="#FF0033"/><path d="M9.8 8.6l5.6 3.4-5.6 3.4z" fill="#fff"/>',
+  ytmusic:   '<circle cx="12" cy="12" r="11" fill="#FF0033"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="#fff" stroke-width="1.3"/><path d="M10.6 9.7l3.8 2.3-3.8 2.3z" fill="#fff"/>',
+  spotify:   '<circle cx="12" cy="12" r="11" fill="#1ED760"/><path d="M6.3 9.1c3.9-1.2 8.2-.9 11.4 1M6.9 12.3c3.2-.9 6.7-.6 9.4.9M7.6 15.3c2.6-.6 5.2-.4 7.3.8" fill="none" stroke="#121212" stroke-width="1.7" stroke-linecap="round"/>',
+  apple:     '<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#FA2D48"/><path d="M15.6 5.2v9.3a2.1 2.1 0 1 1-1.3-1.9V8.3l-4.7 1v6.6a2.1 2.1 0 1 1-1.3-1.9V6.6z" fill="#fff"/>',
+  tidal:     '<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#000" stroke="#5a5a5a" stroke-width="1"/><path d="M4.6 10l2.5-2.5 2.5 2.5-2.5 2.5zM9.5 10L12 7.5l2.5 2.5-2.5 2.5zM14.4 10l2.5-2.5 2.5 2.5-2.5 2.5zM9.5 14.9l2.5-2.5 2.5 2.5-2.5 2.5z" fill="#fff"/>',
+  deezer:    '<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#A238FF"/><path d="M5 17.5h3v-2.5H5zM9.2 17.5h3v-6.5h-3zM13.4 17.5h3V7h-3zM17.6 17.5H19V13h-1.4z" fill="#fff"/>',
+  amazon:    '<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#25D1DA"/><path d="M5.8 13.8c3.6 2.4 8.8 2.4 12.4 0" fill="none" stroke="#0F1111" stroke-width="1.7" stroke-linecap="round"/><path d="M15.9 12.9l2.5.8-.7 2.5" fill="none" stroke="#0F1111" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  bandcamp:  '<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#1DA0C3"/><path d="M3.8 16.6L9 7.4h11.2l-5.2 9.2z" fill="#fff"/>',
+  soundcloud:'<rect x="1" y="1" width="22" height="22" rx="5.5" fill="#FF5500"/><path d="M10.2 16.4V9.7a3.9 3.9 0 0 1 7.4 1.6 2.6 2.6 0 1 1 .5 5.1z" fill="#fff"/><path d="M5.2 16.4v-3.6M6.9 16.4v-5M8.5 16.4v-6" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/>'
+};
+
 const DEFAULT_SERVICES = ['youtube','ytmusic','spotify','apple','tidal','bandcamp'];
 
 // Maps a MusicBrainz url-rel (or any streaming URL) to one of SERVICES.
@@ -769,48 +801,84 @@ async function discogsApiCall(path){
   return data;
 }
 
-async function lookupDiscogs(id){
+async function searchDiscogs(id){
   const attempts = [];
   if(id.catalog_number) attempts.push({ catno: id.catalog_number, artist: id.artist });
   if(id.artist && id.title) attempts.push({ artist: id.artist, release_title: id.title });
   if(id.search_query) attempts.push({ q: id.search_query });
 
-  let hit = null;
   for(const params of attempts){
     const qs = new URLSearchParams({ type: 'release', per_page: '5' });
     for(const [k, v] of Object.entries(params)) if(v) qs.set(k, v);
     const data = await discogsApiCall(`/database/search?${qs.toString()}`);
-    if(data.results && data.results.length){ hit = data.results[0]; break; }
+    if(data.results && data.results.length) return data.results[0];
   }
-  if(!hit) return null;
+  return null;
+}
 
-  const rel = await discogsApiCall(`/releases/${hit.id}`);
-  const releaseArtist = (rel.artists || []).map(a => stripDiscogsArtistSuffix(a.anv || a.name)).join(', ');
-  const tracks = (rel.tracklist || [])
-    .filter(t => t.type_ === 'track' || !t.type_)
-    .map(t => ({
-      position: t.position || '',
-      title: t.title,
-      artist: (t.artists || []).map(a => stripDiscogsArtistSuffix(a.anv || a.name)).join(', '),
-      duration: t.duration || ''
-    }));
-  const videos = (rel.videos || []).filter(v => v.uri).map(v => ({ uri: v.uri, title: v.title || '' }));
+// Discogs' search needs a login, but a release by ID doesn't -- so with
+// no login this goes straight to the public API (25 req/min, plenty here).
+async function fetchDiscogsRelease(releaseId){
+  if(getDiscogsSession()) return discogsApiCall(`/releases/${releaseId}`);
+  const res = await fetch(`https://api.discogs.com/releases/${releaseId}`, { headers: { Accept: 'application/json' } });
+  const data = await safeJson(res);
+  if(!res.ok) throw new Error(data.message || `Discogs API error (${res.status})`);
+  return data;
+}
+
+function discogsArtists(list){
+  return (list || []).map(a => stripDiscogsArtistSuffix(a.anv || a.name) + (a.join && a.join !== ',' ? ` ${a.join} ` : a.join ? ', ' : '')).join('').replace(/[\s,]+$/, '').replace(/\s+/g, ' ');
+}
+
+// Flattens Discogs' tracklist: "heading" rows (e.g. "Side A") become
+// section labels, and "index" rows (medleys) are replaced by their sub-tracks.
+function parseDiscogsTracklist(tracklist){
+  const out = [];
+  const pushTrack = t => out.push({
+    position: t.position || '',
+    title: t.title,
+    artist: discogsArtists(t.artists),
+    duration: t.duration || ''
+  });
+  for(const t of tracklist || []){
+    if(t.type_ === 'heading'){
+      if(t.title) out.push({ heading: true, title: t.title });
+    } else if(t.type_ === 'index'){
+      const subs = (t.sub_tracks || []).filter(st => st.type_ !== 'heading');
+      if(subs.length) subs.forEach(st => pushTrack({ ...st, artists: st.artists || t.artists }));
+      else pushTrack(t);
+    } else {
+      pushTrack(t);
+    }
+  }
+  // Drop a trailing heading with nothing under it.
+  while(out.length && out[out.length - 1].heading) out.pop();
+  return out;
+}
+
+function parseDiscogsRelease(rel, id, fallbackThumb){
   const label = (rel.labels || [])[0];
   return {
     source: 'Discogs',
-    sourceUrl: rel.uri,
-    artist: releaseArtist || id.artist,
+    sourceUrl: rel.uri || `https://www.discogs.com/release/${rel.id}`,
+    artist: discogsArtists(rel.artists) || id.artist,
     title: rel.title || id.title,
     label: label ? stripDiscogsArtistSuffix(label.name) : id.label,
     catno: label ? label.catno : id.catalog_number,
     year: rel.year ? String(rel.year) : id.year,
     country: rel.country || id.country,
     format: (rel.formats || []).map(f => [f.qty > 1 ? `${f.qty}×` : '', f.name, ...(f.descriptions || [])].join(' ').trim()).join(', '),
-    cover: (rel.images || []).find(i => i.type === 'primary')?.uri150 || (rel.images || [])[0]?.uri150 || hit.thumb || '',
-    tracks,
-    videos,
+    cover: (rel.images || []).find(i => i.type === 'primary')?.uri150 || (rel.images || [])[0]?.uri150 || fallbackThumb || '',
+    tracks: parseDiscogsTracklist(rel.tracklist),
+    videos: (rel.videos || []).filter(v => v.uri).map(v => ({ uri: v.uri, title: v.title || '' })),
     directLinks: {}
   };
+}
+
+async function lookupDiscogs(id){
+  const hit = await searchDiscogs(id);
+  if(!hit) return null;
+  return parseDiscogsRelease(await fetchDiscogsRelease(hit.id), id, hit.thumb);
 }
 
 /* ---------- MusicBrainz (free fallback) ---------- */
@@ -864,9 +932,12 @@ async function lookupMusicBrainz(id){
   });
 
   const directLinks = {};
+  let discogsReleaseId = null;
   for(const r of rel.relations || []){
     const url = r.url && r.url.resource;
     if(!url) continue;
+    const dm = url.match(/discogs\.com\/release\/(\d+)/);
+    if(dm && !discogsReleaseId) discogsReleaseId = dm[1];
     const svc = serviceForUrl(url);
     if(svc && !directLinks[svc]) directLinks[svc] = url;
   }
@@ -884,7 +955,8 @@ async function lookupMusicBrainz(id){
     cover: rel['cover-art-archive']?.front ? `https://coverartarchive.org/release/${rel.id}/front-250` : '',
     tracks,
     videos: [],
-    directLinks
+    directLinks,
+    discogsReleaseId
   };
 }
 
@@ -925,13 +997,23 @@ async function lookupAndRender(id, thumb){
   if(!match){
     setStatus(`Found <b>${escapeHtml(id.artist)} — ${escapeHtml(id.title)}</b>. Looking it up on MusicBrainz…`, '', true);
     try{ match = await lookupMusicBrainz(id); }catch(e){ errors.push(`MusicBrainz: ${e.message}`); }
+    if(match && match.discogsReleaseId){
+      setStatus(`Matched on MusicBrainz. Pulling the full tracklist from Discogs…`, '', true);
+      try{
+        const dc = parseDiscogsRelease(await fetchDiscogsRelease(match.discogsReleaseId), id, '');
+        // Discogs wins on tracklist/videos; MusicBrainz keeps its direct
+        // streaming links and cover art if Discogs has none.
+        match = { ...dc, cover: dc.cover || match.cover, directLinks: match.directLinks,
+                  tracks: dc.tracks.length ? dc.tracks : match.tracks, viaMusicBrainz: true };
+      }catch(e){ errors.push(`Discogs: ${e.message}`); }
+    }
   }
   state.result = buildResult(id, match, thumb);
   renderResult();
   saveToHistory(state.result);
   const tail = errors.length ? ` (${escapeHtml(errors.join('; '))})` : '';
   setStatus(match
-    ? `Matched on ${match.source}.${tail}`
+    ? (match.viaMusicBrainz ? `Matched via MusicBrainz → Discogs.${tail}` : `Matched on ${match.source}.${tail}`)
     : `No database match — showing what Claude read.${tail}`, match ? 'ok' : '');
 }
 
@@ -976,9 +1058,9 @@ function findVideo(videos, trackTitle){
   return videos.find(v => re.test(normalize(v.title))) || null;
 }
 
-function linkHtml(svc, href, direct, label){
-  const cls = [svc.yt ? 'yt' : '', direct ? 'direct' : ''].filter(Boolean).join(' ');
-  return `<a class="${cls}" href="${escapeHtml(href)}" target="_blank" rel="noopener">${direct ? '▶ ' : ''}${escapeHtml(label || svc.name)}</a>`;
+function iconLink(svc, href, direct, what){
+  const label = direct ? `${svc.name} — ${what}` : `Search ${svc.name} for this ${what}`;
+  return `<a class="svc-icon${direct ? ' direct' : ''}" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[svc.id]}</svg></a>`;
 }
 
 function renderResult(){
@@ -1007,8 +1089,9 @@ function renderResult(){
   const albumQuery = `${r.artist} ${r.title}`;
   $('albumLinks').innerHTML = enabledServiceList().map(svc => {
     const direct = r.directLinks[svc.id];
-    return linkHtml(svc, direct || svc.search(albumQuery, 'album'), !!direct);
-  }).join('');
+    return iconLink(svc, direct || svc.search(albumQuery, 'album'), !!direct, 'album');
+  }).join('')
+    + `<span class="icon-legend">Dot = direct link · others search the service</span>`;
 
   // Discogs: the matched release page, or a site search when the match
   // came from MusicBrainz / Claude alone (site search needs no login).
@@ -1021,29 +1104,33 @@ function renderResult(){
 
   // Track-level: YouTube gets the release's own video when Discogs lists
   // one for that track; every other service is a track search.
-  $('trackCount').textContent = r.tracks.length
-    ? `${r.tracks.length} tracks${r.tracklistNote ? ' · ' + r.tracklistNote : ''}`
+  const realTracks = r.tracks.filter(t => !t.heading);
+  $('trackCount').textContent = realTracks.length
+    ? `${realTracks.length} tracks${r.tracklistNote ? ' · ' + r.tracklistNote : ''}`
     : '';
-  if(!r.tracks.length){
+  if(!realTracks.length){
     $('trackList').innerHTML = `<div class="hint">No tracklist found — use the album links above, or add a photo of the back cover.</div>`;
   } else {
     $('trackList').innerHTML = r.tracks.map(t => {
+      if(t.heading) return `<div class="track-heading">${escapeHtml(t.title)}</div>`;
       const trackArtist = t.artist || r.artist;
       const q = `${trackArtist} ${t.title}`;
-      const links = enabledServiceList().map(svc => {
+      const icons = enabledServiceList().map(svc => {
         if(svc.id === 'youtube'){
           const v = findVideo(r.videos, t.title);
-          if(v) return linkHtml(svc, v.uri, true);
+          if(v) return iconLink(svc, v.uri, true, 'track');
         }
-        return linkHtml(svc, svc.search(q, 'track'), false);
+        return iconLink(svc, svc.search(q, 'track'), false, 'track');
       }).join('');
       return `
         <div class="track">
           <div class="track-num">${escapeHtml(t.position)}</div>
           <div class="track-body">
-            <div class="track-title">${escapeHtml(t.title)}${t.duration ? `<span class="dur">${escapeHtml(t.duration)}</span>` : ''}</div>
-            ${t.artist ? `<div class="track-artist">${escapeHtml(t.artist)}</div>` : ''}
-            <div class="links small">${links}</div>
+            <div class="track-main">
+              <div class="track-title">${escapeHtml(t.title)}${t.duration ? `<span class="dur">${escapeHtml(t.duration)}</span>` : ''}</div>
+              ${t.artist ? `<div class="track-artist">${escapeHtml(t.artist)}</div>` : ''}
+            </div>
+            <div class="track-icons">${icons}</div>
           </div>
         </div>`;
     }).join('');
