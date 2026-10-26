@@ -145,16 +145,23 @@ button.small{padding:7px 12px;font-size:11px;}
 .footnote{font-size:12px;color:var(--text-faint);margin-top:26px;line-height:1.6;}
 
 /* capture */
-.capture-btn{
-  width:100%;padding:22px 20px;font-size:17px;
-  display:flex;align-items:center;justify-content:center;gap:12px;
+.capture-actions{display:flex;align-items:flex-start;gap:22px;flex-wrap:wrap;}
+.icon-action{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:none;border:none;padding:0;cursor:pointer;color:var(--text-dim);
+  font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:400;letter-spacing:.04em;text-transform:none;
 }
-.capture-btn .disc-icon{
-  width:26px;height:26px;border-radius:50%;
-  background:radial-gradient(circle,#16140F 0 3px, var(--amber) 3px 7px, #16140F 7px 8px, transparent 8px),
-             repeating-radial-gradient(circle,#16140F 0 1px, #2a2517 1px 2px);
-  flex-shrink:0;
+.icon-action:hover{background:none;color:var(--text);}
+.icon-action:disabled{background:none;opacity:.4;}
+.icon-action .ring{
+  width:52px;height:52px;border-radius:50%;border:1px solid var(--border-bright);
+  display:flex;align-items:center;justify-content:center;color:var(--text);
 }
+.icon-action:hover .ring{border-color:var(--amber);}
+.icon-action svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.icon-action.primary .ring{width:68px;height:68px;background:var(--amber);border-color:var(--amber);color:#16140F;}
+.icon-action.primary svg{width:32px;height:32px;}
+.icon-action.primary{color:var(--amber);}
 .photo-tray{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
 .photo-thumb{position:relative;width:84px;height:84px;border:1px solid var(--border-bright);border-radius:2px;overflow:hidden;}
 .photo-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
@@ -292,11 +299,23 @@ details.settings .settings-body{margin-top:14px;}
       <div class="panel-title">Snap a record</div>
     </div>
     <div class="panel-sub">Front cover, back cover, or the center label all work. Add a second angle if the first guess is shaky — every photo in the tray is sent together.</div>
-    <button class="capture-btn" id="btnCamera"><span class="disc-icon"></span>Take a photo</button>
-    <div class="row-actions" style="margin-top:10px;">
-      <button class="ghost small" id="btnLibrary">Choose from library</button>
-      <button class="ghost small hidden" id="btnRetry">Identify again</button>
-      <button class="ghost small hidden" id="btnClearPhotos">Clear photos</button>
+    <div class="capture-actions">
+      <button class="icon-action primary" id="btnCamera" aria-label="Take a photo">
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M3 8.5A2 2 0 0 1 5 6.5h2.2l1.5-2h6.6l1.5 2H19a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.8"/></svg></span>
+        <span class="cap" id="cameraCaption">Camera</span>
+      </button>
+      <button class="icon-action" id="btnLibrary" aria-label="Choose from library">
+        <span class="ring"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="15" height="13" rx="2"/><path d="M6 3h13a2 2 0 0 1 2 2v11"/><circle cx="8" cy="9.5" r="1.4"/><path d="M3.5 16l4.5-4 3.5 3 2.5-2 3.5 3"/></svg></span>
+        <span class="cap">Library</span>
+      </button>
+      <button class="icon-action hidden" id="btnRetry" aria-label="Identify again">
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></span>
+        <span class="cap">Retry</span>
+      </button>
+      <button class="icon-action hidden" id="btnClearPhotos" aria-label="Clear photos">
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/></svg></span>
+        <span class="cap">Clear</span>
+      </button>
     </div>
     <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden">
     <input type="file" id="libraryInput" accept="image/*" multiple class="hidden">
@@ -580,7 +599,8 @@ function renderTray(){
   const has = state.photos.length > 0;
   $('btnRetry').classList.toggle('hidden', !has);
   $('btnClearPhotos').classList.toggle('hidden', !has);
-  $('btnCamera').lastChild.textContent = has ? 'Add another angle' : 'Take a photo';
+  $('cameraCaption').textContent = has ? 'Add angle' : 'Camera';
+  $('btnCamera').setAttribute('aria-label', has ? 'Add another angle' : 'Take a photo');
 }
 
 /* ---------- Claude vision ---------- */
