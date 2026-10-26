@@ -809,6 +809,22 @@ async function discogsApiCall(path){
   return data;
 }
 
+// Discogs rate-limits per app key, shared by everyone scanning without a
+// login -- a short wait usually clears it. Kept brief so a scan never
+// stalls for long; after that the MusicBrainz fallback takes over.
+async function discogsApiCallWithRetry(path){
+  const waits = [3000, 6000];
+  for(let attempt = 0; ; attempt++){
+    try{
+      return await discogsApiCall(path);
+    }catch(e){
+      if(e.status !== 429 || attempt >= waits.length) throw e;
+      setStatus(`Discogs is busy — retrying in ${waits[attempt] / 1000}s…`, '', true);
+      await sleep(waits[attempt]);
+    }
+  }
+}
+
 function normCatno(s){
   return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -840,7 +856,7 @@ async function searchDiscogs(id){
   for(const params of attempts){
     const qs = new URLSearchParams({ type: 'release', per_page: '25' });
     for(const [k, v] of Object.entries(params)) if(v) qs.set(k, v);
-    const results = (await discogsApiCall(`/database/search?${qs.toString()}`)).results || [];
+    const results = (await discogsApiCallWithRetry(`/database/search?${qs.toString()}`)).results || [];
     if(catno){
       const exact = results.filter(r => normCatno(r.catno) === catno);
       const best = exact.find(r => discogsResultMatchesArtist(r, id.artist)) || (params.artist ? exact[0] : null);
@@ -858,7 +874,7 @@ async function searchDiscogs(id){
 // directly (release lookups don't need auth).
 async function fetchDiscogsRelease(releaseId){
   try{
-    return await discogsApiCall(`/releases/${releaseId}`);
+    return await discogsApiCallWithRetry(`/releases/${releaseId}`);
   }catch(e){
     if(getDiscogsSession()) throw e;
     const res = await fetch(`https://api.discogs.com/releases/${releaseId}`, { headers: { Accept: 'application/json' } });

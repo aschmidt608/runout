@@ -50,12 +50,19 @@ jobs:
           workingDirectory: discogs-oauth-worker
           command: deploy
 
-      - name: Smoke-test the new /discogs/public endpoint
+      # 200 = working. 429 still proves the Worker reached Discogs (an old
+      # Worker answers 404), so it's a warning, not a failed deploy.
+      - name: Smoke-test the /discogs/public endpoint
         if: steps.token.outputs.present == 'true'
         run: |
-          code=$(curl -s -o body.json -w '%{http_code}' -X POST \
-            -H 'Content-Type: application/json' \
-            -d '{"path":"/database/search?type=release&catno=FACT+75&per_page=1"}' \
-            https://runout-discogs-oauth.thierryennuimusic.workers.dev/discogs/public)
-          echo "HTTP $code"; head -c 300 body.json; echo
-          [ "$code" = "200" ]
+          for attempt in 1 2 3; do
+            code=$(curl -s -o body.json -w '%{http_code}' -X POST \
+              -H 'Content-Type: application/json' \
+              -d '{"path":"/database/search?type=release&catno=FACT+75&per_page=1"}' \
+              https://runout-discogs-oauth.thierryennuimusic.workers.dev/discogs/public)
+            echo "Attempt $attempt: HTTP $code"; head -c 300 body.json; echo
+            [ "$code" = "200" ] && exit 0
+            [ "$code" = "429" ] || exit 1
+            sleep 15
+          done
+          echo "::warning::Discogs is rate-limiting the app key (429); the endpoint is deployed but couldn't be fully verified."
