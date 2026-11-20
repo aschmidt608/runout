@@ -72,11 +72,17 @@ jobs:
 
       # No password sent: the new /demo/scan route answers 401, an old
       # Worker without it answers 404. Costs nothing -- Anthropic isn't called.
+      # Retries because the old version keeps serving for a few seconds
+      # after a deploy while the new one propagates.
       - name: Smoke-test the /demo/scan endpoint
         if: steps.token.outputs.present == 'true'
         run: |
-          code=$(curl -s -o body.json -w '%{http_code}' -X POST \
-            -H 'Content-Type: application/json' -d '{}' \
-            https://runout-claude-proxy.thierryennuimusic.workers.dev/demo/scan)
-          echo "HTTP $code"; head -c 300 body.json; echo
-          [ "$code" = "401" ]
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o body.json -w '%{http_code}' -X POST \
+              -H 'Content-Type: application/json' -d '{}' \
+              https://runout-claude-proxy.thierryennuimusic.workers.dev/demo/scan)
+            echo "Attempt $attempt: HTTP $code"; head -c 300 body.json; echo
+            [ "$code" = "401" ] && exit 0
+            sleep 10
+          done
+          exit 1
