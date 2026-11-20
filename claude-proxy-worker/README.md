@@ -24,8 +24,13 @@ unbounded bill on the owner's account.
 5. Deploy: `wrangler deploy`
 6. Note the URL wrangler prints (looks like `https://runout-claude-proxy.<your-subdomain>.workers.dev`) -- that's what `demo.html` needs to call.
 
-Adjust the daily cap by editing `DAILY_REQUEST_LIMIT` in `wrangler.toml` (defaults to 50) and redeploying.
+Adjust the daily caps with the plain-text variables `DAILY_REQUEST_LIMIT` (set-prep generations, default 50) and `SCAN_DAILY_LIMIT` (record scans, default 100) in the Cloudflare dashboard (Worker > Settings > Variables). No redeploy needed.
+
+## Automatic deploys
+
+`.github/workflows/deploy-claude-worker.yml` redeploys this Worker whenever anything under `claude-proxy-worker/` changes on `main` (or on demand from the Actions tab), using the same `CLOUDFLARE_API_TOKEN` repo secret as the Discogs Worker. It reads the KV namespace id from the live Worker's settings, so the placeholder in `wrangler.toml` never needs filling in. Secrets and dashboard variables are kept.
 
 ## Endpoint
 
+- `POST /demo/scan` `{ password, system, schema, images, text }` -> Anthropic's response for a record-photo identification (used by `scan.html` when a friend signs in with the password). Model, effort and output size are fixed in the Worker, the answer is forced into the page's JSON schema, and at most 4 photos are accepted. Has its own daily cap, `SCAN_DAILY_LIMIT` (default 100), and its own usage records (`scan-usage:` keys), separate from `/demo/generate`.
 - `POST /demo/generate` `{ password, model, max_tokens, system, messages }` -> whatever Anthropic's Messages API returns, passed through as-is (or `{ error }` with 401 for a wrong password, 429 once the daily cap is hit)

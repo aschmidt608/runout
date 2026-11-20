@@ -22,6 +22,15 @@
  *                           password immediately.
  *   POST /demo/generate     { password, model, max_tokens, system, messages }
  *                           -> whatever Anthropic's Messages API returns
+ *   POST /demo/scan         { password, system, schema, images, text }
+ *                           -> whatever Anthropic's Messages API returns.
+ *                           For scan.html (record photo -> identification).
+ *                           Model, effort and output size are fixed here, the
+ *                           answer is forced into the page's JSON schema, and
+ *                           only a few photos are accepted -- so the password
+ *                           can't be used to run arbitrary requests on the key.
+ *                           Separate daily cap (SCAN_DAILY_LIMIT, default 100)
+ *                           and separate usage records from /demo/generate.
  *   POST /demo/bpm          { password, artist, title } -> { bpm: number|null }
  *   POST /demo/usage-stats  { password } -> { days: [{date, inputTokens,
  *                           outputTokens, generations}, ...] }
@@ -45,19 +54,24 @@ function json(data, status, origin) {
   });
 }
 
-async function checkAndIncrementDailyCount(kv, limit) {
+const SCAN_MODEL = 'claude-opus-5-5';
+const SCAN_MAX_PHOTOS = 4;
+const SCAN_MAX_PHOTO_CHARS = 3_000_000; // base64 chars; the page sends ~1568px JPEGs, well under this
+const SCAN_MAX_SYSTEM_CHARS = 10_000;
+
+async function checkAndIncrementDailyCount(kv, limit, prefix = 'count') {
   const today = new Date().toISOString().slice(0, 10);
-  const key = `count:${today}`;
+  const key = `${prefix}:${today}`;
   const current = parseInt(await kv.get(key), 10) || 0;
   if (current >= limit) return false;
   await kv.put(key, String(current + 1), { expirationTtl: 172800 });
   return true;
 }
 
-async function recordUsage(kv, usage) {
+async function recordUsage(kv, usage, prefix = 'usage') {
   if (!usage) return;
   const today = new Date().toISOString().slice(0, 10);
-  const key = `usage:${today}`;
+  const key = `${prefix}:${today}`;
   const current = JSON.parse((await kv.get(key)) || '{"inputTokens":0,"outputTokens":0,"generations":0}');
   current.inputTokens += usage.input_tokens || 0;
   current.outputTokens += usage.output_tokens || 0;
@@ -118,6 +132,68 @@ export default {
           await recordUsage(env.RUNOUT_DEMO_KV, parsed.usage);
         } catch (e) {}
         return new Response(text, {
+          status: res.status,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+        });
+      } catch (e) {
+        return json({ error: e.message || 'Internal error' }, 500, origin);
+      }
+    }
+
+    if (url.pathname === '/demo/scan' && request.method === 'POST') {
+      try {
+        const { password, system, schema, images, text } = await request.json();
+
+        if (!password || password !== env.DEMO_PASSWORD) {
+          return json({ error: 'Wrong password.' }, 401, origin);
+        }
+        if (typeof system !== 'string' || !system || system.length > SCAN_MAX_SYSTEM_CHARS) {
+          return json({ error: 'system prompt missing or too long' }, 400, origin);
+        }
+        if (!schema || typeof schema !== 'object') {
+          return json({ error: 'schema required' }, 400, origin);
+        }
+        if (!Array.isArray(images) || !images.length || images.length > SCAN_MAX_PHOTOS
+            || images.some(i => typeof i !== 'string' || !i || i.length > SCAN_MAX_PHOTO_CHARS)) {
+          return json({ error: `send 1-${SCAN_MAX_PHOTOS} JPEG photos` }, 400, origin);
+        }
+
+        const limit = parseInt(env.SCAN_DAILY_LIMIT, 10) || 100;
+        const allowed = await checkAndIncrementDailyCount(env.RUNOUT_DEMO_KV, limit, 'scan-count');
+        if (!allowed) {
+          return json({ error: `Scanning has hit its daily limit of ${limit} -- try again tomorrow.` }, 429, origin);
+        }
+
+        const content = images.map(data => ({
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data }
+        }));
+        content.push({ type: 'text', text: String(text || 'Identify this record.').slice(0, 500) });
+
+        const res = await fetch(ANTHROPIC_API, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            // If the primary model declines, the API re-runs on a fallback
+            // model in the same request instead of just stopping.
+            'anthropic-beta': 'server-side-fallback-2026-07-01'
+          },
+          body: JSON.stringify({
+            model: SCAN_MODEL,
+            max_tokens: 16000,
+            fallbacks: 'default',
+            system,
+            output_config: { effort: 'low', format: { type: 'json_schema', schema } },
+            messages: [{ role: 'user', content }]
+          })
+        });
+        const body = await res.text();
+        try {
+          await recordUsage(env.RUNOUT_DEMO_KV, JSON.parse(body).usage, 'scan-usage');
+        } catch (e) {}
+        return new Response(body, {
           status: res.status,
           headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
         });

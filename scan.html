@@ -277,18 +277,32 @@ details.settings .settings-body{margin-top:14px;}
     <div class="mast-meta"><a href="index.html">← Set prep</a></div>
   </div>
 
-  <!-- API KEY (collapses once saved) -->
+  <!-- ACCESS (collapses once a password or key is saved) -->
   <div class="panel" id="panelApiKey">
     <div class="panel-head">
       <div class="panel-num">0</div>
-      <div class="panel-title">Claude API key</div>
+      <div class="panel-title">Access</div>
     </div>
-    <div class="panel-sub">Used to read the record from your photo. Shared with the main Runout page (same browser storage) — get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:var(--teal);">console.anthropic.com</a>. Sent only from your device directly to Anthropic.</div>
-    <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+    <div class="panel-sub">Scanning uses Claude to read the record. Got the password from a friend? Enter it — scans then run on their account, up to a daily limit.</div>
+    <label for="demoPasswordInput">Password</label>
+    <input type="password" id="demoPasswordInput" placeholder="Password">
     <div class="row-actions" style="margin-top:10px;">
-      <button class="small" id="btnSaveApiKey">Save key</button>
-      <button class="ghost small" id="btnClearApiKey">Clear key</button>
-      <span class="hint" id="apiKeyHint" style="margin:0;"></span>
+      <button class="small" id="btnSaveDemoPassword">Save password</button>
+      <span class="hint" id="demoPasswordHint" style="margin:0;"></span>
+    </div>
+    <details class="settings" style="margin-top:18px;">
+      <summary>Or use your own Claude API key</summary>
+      <div class="settings-body">
+        <div class="hint" style="margin:0 0 10px;">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a>. Stored only in this browser and sent directly to Anthropic. Takes priority over the password.</div>
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+        <div class="row-actions" style="margin-top:10px;">
+          <button class="small" id="btnSaveApiKey">Save key</button>
+          <span class="hint" id="apiKeyHint" style="margin:0;"></span>
+        </div>
+      </div>
+    </details>
+    <div class="row-actions" style="margin-top:16px;">
+      <button class="ghost small" id="btnClearAccess">Sign out (forget password and key)</button>
     </div>
   </div>
 
@@ -376,6 +390,7 @@ details.settings .settings-body{margin-top:14px;}
       <summary>Services to show</summary>
       <div class="settings-body">
         <div class="chip-group" id="serviceChips"></div>
+        <div class="hint" style="margin-top:14px;"><span id="accessSummary"></span> <a href="#" id="linkShowAccess">Change</a></div>
       </div>
     </details>
   </div>
@@ -392,13 +407,17 @@ details.settings .settings-body{margin-top:14px;}
   </div>
 
   <div class="footnote">
-    How it works: your photo(s) go from your device straight to Anthropic, where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it — here or on the main Runout page, same login) or MusicBrainz (free, no login; when its entry links to the Discogs release, the tracklist is pulled from Discogs anyway), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Icons with a dot are direct matches from that data; the rest search that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
+    How it works: your photo(s) go to Anthropic — straight from your device with your own key, or through a small Worker when you use the password — where Claude reads the artist, title, label, catalog number and any visible tracklist. That's then matched against Discogs (if you've connected it — here or on the main Runout page, same login) or MusicBrainz (free, no login; when its entry links to the Discogs release, the tracklist is pulled from Discogs anyway), which supplies the real tracklist, cover art, and — when the database has them — direct YouTube videos and streaming links. Icons with a dot are direct matches from that data; the rest search that service, which almost always land on the right thing for mainstream releases but can miss for obscure or vinyl-only pressings. If neither database finds the record, the tracklist falls back to what Claude read or knows, flagged as such. Photos aren't stored; recent scans keep only a small thumbnail in this browser's local storage.
   </div>
 
 </div>
 
 <script>
 const API_KEY_STORAGE = 'anthropic-api-key';
+// Same key demo.html uses, so a friend who unlocked that page is unlocked here too.
+const DEMO_PASSWORD_STORAGE = 'demo-password';
+// Holds the owner's Anthropic key server-side; see claude-proxy-worker/.
+const CLAUDE_PROXY_WORKER_URL = 'https://runout-claude-proxy.thierryennuimusic.workers.dev';
 const SERVICES_STORAGE = 'runout-scan-services';
 const HISTORY_STORAGE = 'runout-scan-history';
 const HISTORY_MAX = 20;
@@ -496,11 +515,45 @@ function normalize(s){
 }
 
 /* ---------- API key ---------- */
-function initApiKey(){
-  const key = lsGet(API_KEY_STORAGE);
-  if(key){
-    $('apiKeyInput').value = key;
-    $('panelApiKey').classList.add('hidden');
+function getAccess(){
+  const apiKey = lsGet(API_KEY_STORAGE);
+  if(apiKey) return { apiKey };
+  const password = lsGet(DEMO_PASSWORD_STORAGE);
+  if(password) return { password };
+  return null;
+}
+function renderAccess(){
+  const access = getAccess();
+  $('panelApiKey').classList.toggle('hidden', !!access);
+  $('apiKeyInput').value = lsGet(API_KEY_STORAGE) || '';
+  $('demoPasswordInput').value = lsGet(DEMO_PASSWORD_STORAGE) || '';
+  $('accessSummary').textContent = !access ? 'Not signed in.'
+    : access.apiKey ? 'Scanning with your own Claude API key.'
+    : 'Scanning with a friend\'s password.';
+}
+async function saveDemoPassword(){
+  const password = $('demoPasswordInput').value.trim();
+  if(!password){ $('demoPasswordHint').textContent = 'Enter the password first.'; return; }
+  $('btnSaveDemoPassword').disabled = true;
+  $('demoPasswordHint').className = 'hint';
+  $('demoPasswordHint').textContent = 'Checking…';
+  try{
+    const res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/verify`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password })
+    });
+    if(res.status === 401) throw new Error('Wrong password.');
+    if(!res.ok) throw new Error(`Couldn't check the password (HTTP ${res.status}).`);
+    lsSet(DEMO_PASSWORD_STORAGE, password);
+    $('demoPasswordHint').className = 'hint ok';
+    $('demoPasswordHint').textContent = '✓ You\'re in.';
+    setTimeout(renderAccess, 600);
+  }catch(e){
+    $('demoPasswordHint').className = 'hint error';
+    $('demoPasswordHint').textContent = e.message;
+  }finally{
+    $('btnSaveDemoPassword').disabled = false;
   }
 }
 function saveApiKey(){
@@ -508,12 +561,15 @@ function saveApiKey(){
   if(!key){ $('apiKeyHint').textContent = 'Paste a key first.'; return; }
   lsSet(API_KEY_STORAGE, key);
   $('apiKeyHint').textContent = 'Key saved.';
-  setTimeout(()=> $('panelApiKey').classList.add('hidden'), 600);
+  setTimeout(renderAccess, 600);
 }
-function clearApiKey(){
+function clearAccess(){
   lsDel(API_KEY_STORAGE);
-  $('apiKeyInput').value = '';
-  $('apiKeyHint').textContent = 'Key cleared.';
+  lsDel(DEMO_PASSWORD_STORAGE);
+  $('apiKeyHint').textContent = '';
+  $('demoPasswordHint').textContent = '';
+  renderAccess();
+  $('panelApiKey').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ---------- services ---------- */
@@ -608,6 +664,8 @@ const IDENTIFY_SYSTEM = `You identify vinyl records from photos for a DJ who wan
 
 The photos may show the front cover, back cover, spine, or the center label of the disc itself, possibly at an angle, in poor light, or partly obscured. Read every piece of printed text carefully: artist, title, record label, catalog number (often on the spine, back cover, or label edge, e.g. "FAC 75", "SST 001", "12-INCH 4331"), year, and any side/track listing. If matrix/runout etchings are legible, transcribe them. Identify the release as specifically as the evidence allows: correct spelling matters more than guessing, because your answer is used to search Discogs and MusicBrainz.
 
+What is printed on the record always wins over what you remember. Many records, especially recent releases and reissues, are newer than your knowledge. If the photo shows a title you don't recognize, report that printed title as the title: never swap in a different release by the same artist because the cover style, label or year looks familiar. If you suspect it's actually a release you know, say so in notes, but keep title, catalog_number and search_query as printed.
+
 Tracklist: if a tracklist is legible in the photos, transcribe it (tracklist_source "photo"). Only add tracks you cannot see if you are certain they belong to this exact release (tracklist_source "knowledge") -- never guess a title. A wrong track is worse than a missing one, because the user will search streaming services for it. For a single where only one side's label is visible, list just that side. If nothing is legible and you aren't certain, return an empty tracklist (tracklist_source "none"). "title" is the release title as printed; for a single showing one side, that side's track title. Use vinyl positions (A1, A2, B1...) when known, else numbers. For compilations or splits, fill track artist; otherwise leave it empty.
 
 confidence: "high" when the text clearly names the release, "medium" when you're inferring from partial text or cover art, "low" when it's a best guess. If you can't tell what record it is at all, set identified false and explain what's needed in notes (e.g. "photo the spine or label"). Use empty strings for unknown fields. search_query is the best plain-text query (usually "Artist Title") to find this release on a streaming service.`;
@@ -646,43 +704,69 @@ const IDENTIFY_SCHEMA = {
   }
 };
 
-async function callClaudeIdentify(apiKey, photos){
-  const content = photos.map(p => ({
-    type: 'image',
-    source: { type: 'base64', media_type: 'image/jpeg', data: p.base64 }
-  }));
-  content.push({ type: 'text', text: photos.length > 1
+async function callClaudeIdentify(access, photos){
+  const text = photos.length > 1
     ? `These ${photos.length} photos are all of the same record. Identify it.`
-    : 'Identify this record.' });
+    : 'Identify this record.';
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-      // If the primary model declines, the API re-runs on a fallback model
-      // in the same request instead of just stopping.
-      'anthropic-beta': 'server-side-fallback-2026-07-01'
-    },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      max_tokens: 16000,
-      fallbacks: 'default',
-      system: IDENTIFY_SYSTEM,
-      // Low effort keeps this fast -- reading a label is mostly OCR plus
-      // recall, not deep reasoning. Bump it if identifications get sloppy.
-      output_config: {
-        effort: 'low',
-        format: { type: 'json_schema', schema: IDENTIFY_SCHEMA }
+  let res;
+  if(access.apiKey){
+    const content = photos.map(p => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: p.base64 }
+    }));
+    content.push({ type: 'text', text });
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': access.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        // If the primary model declines, the API re-runs on a fallback model
+        // in the same request instead of just stopping.
+        'anthropic-beta': 'server-side-fallback-2026-07-01'
       },
-      messages: [{ role: 'user', content }]
-    })
-  });
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 16000,
+        fallbacks: 'default',
+        system: IDENTIFY_SYSTEM,
+        // Low effort keeps this fast -- reading a label is mostly OCR plus
+        // recall, not deep reasoning. Bump it if identifications get sloppy.
+        output_config: {
+          effort: 'low',
+          format: { type: 'json_schema', schema: IDENTIFY_SCHEMA }
+        },
+        messages: [{ role: 'user', content }]
+      })
+    });
+  } else {
+    // Friend access: the Worker holds the owner's key and fixes the model,
+    // effort and output size itself (the same settings as above).
+    res = await fetch(`${CLAUDE_PROXY_WORKER_URL}/demo/scan`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        password: access.password,
+        system: IDENTIFY_SYSTEM,
+        schema: IDENTIFY_SCHEMA,
+        images: photos.map(p => p.base64),
+        text
+      })
+    });
+    if(res.status === 401){
+      lsDel(DEMO_PASSWORD_STORAGE);
+      renderAccess();
+      throw new Error('That password no longer works — ask for the current one.');
+    }
+    if(res.status === 404){
+      throw new Error('Friend scanning isn\'t switched on yet (the Worker needs updating).');
+    }
+  }
   if(!res.ok){
     const errBody = await res.json().catch(()=>({}));
-    throw new Error(errBody?.error?.message || `Anthropic API returned HTTP ${res.status}`);
+    throw new Error(errBody?.error?.message || errBody?.error || `Scan failed (HTTP ${res.status})`);
   }
   const data = await res.json();
   if(data.stop_reason === 'refusal'){
@@ -691,9 +775,9 @@ async function callClaudeIdentify(apiKey, photos){
   if(data.stop_reason === 'max_tokens'){
     throw new Error('Claude\'s answer was cut off — try again.');
   }
-  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  const answer = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
   try{
-    return JSON.parse(text);
+    return JSON.parse(answer);
   }catch(e){
     throw new Error('Claude didn\'t return a usable answer — try again.');
   }
@@ -1053,17 +1137,18 @@ async function lookupMusicBrainz(id){
 /* ---------- identify + lookup pipeline ---------- */
 async function identify(){
   if(state.scanInFlight || !state.photos.length) return;
-  const apiKey = lsGet(API_KEY_STORAGE) || $('apiKeyInput').value.trim();
-  if(!apiKey){
+  const access = getAccess();
+  if(!access){
     $('panelApiKey').classList.remove('hidden');
-    setStatus('Add your Claude API key above first.', 'error');
+    $('panelApiKey').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setStatus('Enter the password (or your own Claude API key) above first.', 'error');
     return;
   }
   state.scanInFlight = true;
   $('btnRetry').disabled = true;
   try{
     setStatus('Reading the record…', '', true);
-    const id = await callClaudeIdentify(apiKey, state.photos);
+    const id = await callClaudeIdentify(access, state.photos);
     if(!id.identified){
       setStatus(escapeHtml(id.notes || 'Couldn\'t tell which record this is — try the spine or center label.'), 'error');
       return;
@@ -1293,14 +1378,17 @@ function renderHistory(){
 
 /* ---------- wiring ---------- */
 async function init(){
-  initApiKey();
+  renderAccess();
   initServices();
   renderHistory();
   $('btnDiscogsConnect').addEventListener('click', connectDiscogs);
   $('btnDiscogsDisconnect').addEventListener('click', disconnectDiscogs);
 
   $('btnSaveApiKey').addEventListener('click', saveApiKey);
-  $('btnClearApiKey').addEventListener('click', clearApiKey);
+  $('btnSaveDemoPassword').addEventListener('click', saveDemoPassword);
+  $('demoPasswordInput').addEventListener('keydown', e => { if(e.key === 'Enter') saveDemoPassword(); });
+  $('btnClearAccess').addEventListener('click', clearAccess);
+  $('linkShowAccess').addEventListener('click', e => { e.preventDefault(); $('panelApiKey').classList.remove('hidden'); $('panelApiKey').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('btnCamera').addEventListener('click', () => $('cameraInput').click());
   $('btnLibrary').addEventListener('click', () => $('libraryInput').click());
   $('cameraInput').addEventListener('change', e => { addPhotos(e.target.files); e.target.value = ''; });

@@ -1,0 +1,82 @@
+name: Deploy Claude Worker
+
+# Redeploys claude-proxy-worker/ to Cloudflare whenever its code changes on
+# main. Same CLOUDFLARE_API_TOKEN secret as the Discogs Worker (optional
+# CLOUDFLARE_ACCOUNT_ID). The Worker's secrets (ANTHROPIC_API_KEY,
+# DEMO_PASSWORD, GETSONGBPM_API_KEY) and dashboard variables stay untouched.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'claude-proxy-worker/**'
+      - '.github/workflows/deploy-claude-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-claude-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for Cloudflare token
+        id: token
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN secret not set -- skipping Worker deploy."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v4
+
+      # The KV namespace was created in the dashboard, so its id isn't in the
+      # repo. Read it from the live Worker's bindings and write it into
+      # wrangler.toml for this deploy only.
+      - name: Fill in the KV namespace id
+        if: steps.token.outputs.present == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          api() { curl -sf -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4$1"; }
+          acct="$CF_ACCOUNT"
+          if [ -z "$acct" ]; then
+            acct=$(api /accounts | jq -r 'if (.result | length) == 1 then .result[0].id else empty end')
+            [ -n "$acct" ] || { echo "::error::Token sees more or fewer than one account -- add a CLOUDFLARE_ACCOUNT_ID secret."; exit 1; }
+          fi
+          kv=$(api "/accounts/$acct/workers/scripts/runout-claude-proxy/settings" \
+            | jq -r '.result.bindings[]? | select(.name == "RUNOUT_DEMO_KV" and .type == "kv_namespace") | .namespace_id')
+          [ -n "$kv" ] || { echo "::error::Couldn't find the RUNOUT_DEMO_KV binding on the live runout-claude-proxy Worker."; exit 1; }
+          sed -i "s/REPLACE_WITH_KV_NAMESPACE_ID/$kv/" claude-proxy-worker/wrangler.toml
+          echo "Using KV namespace $kv"
+
+      - name: Deploy with wrangler
+        if: steps.token.outputs.present == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: claude-proxy-worker
+          command: deploy
+
+      # No password sent: the new /demo/scan route answers 401, an old
+      # Worker without it answers 404. Costs nothing -- Anthropic isn't called.
+      - name: Smoke-test the /demo/scan endpoint
+        if: steps.token.outputs.present == 'true'
+        run: |
+          code=$(curl -s -o body.json -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' -d '{}' \
+            https://runout-claude-proxy.thierryennuimusic.workers.dev/demo/scan)
+          echo "HTTP $code"; head -c 300 body.json; echo
+          [ "$code" = "401" ]

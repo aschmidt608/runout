@@ -10,9 +10,14 @@ compatibility_date = "2024-01-01"
 # KV namespace for the daily request counter. Create it once with:
 #   wrangler kv namespace create RUNOUT_DEMO_KV
 # then replace the id below with the one it prints.
+# The deploy workflow (.github/workflows/deploy-claude-worker.yml) swaps in
+# the real id at deploy time, read from the live Worker's own settings.
 kv_namespaces = [
   { binding = "RUNOUT_DEMO_KV", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
 ]
 
-[vars]
-DAILY_REQUEST_LIMIT = "50"
+# Daily caps are plain-text variables: DAILY_REQUEST_LIMIT (set-prep
+# generations, default 50) and SCAN_DAILY_LIMIT (record scans, default 100).
+# Set them in the Cloudflare dashboard (Worker > Settings > Variables);
+# keep_vars stops a deploy from this file wiping them.
+keep_vars = true
